@@ -69,6 +69,9 @@ def send_all_to_admin(message, user_order):
 # ТУГМАИ НАРХНОМА
 @bot.message_handler(func=lambda message: message.text == "💰 Нархнома")
 def show_price(message):
-    bot.send_message(message.chat.id, "Нархи ботҳо аз 150 сомонӣ оғоз мешавад.")
+    bot.send_message(message.chat.id, "Нархи бот Хо
+    Боти Оди 80 сомон
+    бот барои Тичорат 250 сомон
+    бот барои Магоза 600 сомон.")
 
 bot.polling(none_stop=True)
