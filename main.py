@@ -3,7 +3,7 @@ from telebot import types
 
 # Танзимот
 TOKEN = '8589284419:AAFGfNgr8LjyCC40q7nuvAl7Aq-Y2f-JDT0'
-MY_ID = 123456789  # ID-и худро, ки аз @userinfobot гирифтӣ, инҷо гузор
+MY_ID = 5863448768 # ID-и худро, ки аз @userinfobot гирифтӣ, инҷо гузор
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
