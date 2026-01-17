@@ -1,4 +1,4 @@
-import telebot
+import telebot  # Ислоҳ шуд: 'import' бо ҳарфи хурд
 from telebot import types
 from flask import Flask
 import threading
@@ -16,21 +16,18 @@ def run():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# Оғози сервер дар замина (Thread)
-daemon = threading.Thread(target=run)
-daemon.daemon = True
-daemon.start()
+# Функсия барои оғози сервер дар замина
+def keep_alive():
+    t = threading.Thread(target=run)
+    t.daemon = True
+    t.start()
 
 # --- ТАНЗИМОТИ БОТ ---
-# Токени худро дар ин ҷо гузоред
 TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8' 
 MY_ID = 5863448768 
 bot = telebot.TeleBot(TOKEN)
 
-# Истинод ба акс
 PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_152616.jpg"
-
-# Базаи маълумоти муваққатӣ дар хотира
 bookings = {} 
 
 # --- МЕНЮИ АСОСӢ ---
@@ -63,7 +60,6 @@ def show_services(message):
     try:
         bot.send_photo(message.chat.id, PHOTO_URL, caption=caption_text, parse_mode="Markdown", reply_markup=inline_markup)
     except Exception as e:
-        # Агар расм бор нашавад, танҳо матн меравад
         bot.send_message(message.chat.id, caption_text, parse_mode="Markdown", reply_markup=inline_markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "go_book")
@@ -107,11 +103,7 @@ def final_booking(message, phone):
         bot.register_next_step_handler(msg, final_booking, phone)
     else:
         bookings[user_time] = {"id": message.from_user.id, "phone": phone, "name": message.from_user.first_name}
-        
-        # Хабар ба Админ
         bot.send_message(MY_ID, f"📅 **НАВБАТИ НАВ!**\n👤: {message.from_user.first_name}\n📞: {phone}\n⏰: {user_time}")
-        
-        # Хабар ба Муштарӣ
         bot.send_message(message.chat.id, f"✅ Соати {user_time} захира шуд!", reply_markup=main_menu())
 
 # --- БЕКОР КАРДАН ---
@@ -156,7 +148,8 @@ def a_del_callback(call):
             del bookings[s]
             bot.edit_message_text(f"✅ Вақти {s} холӣ карда шуд.", call.message.chat.id, call.message.message_id)
 
-# --- ОҒОЗИ БОТ ---
+# --- ОҒОЗИ БОТ ВА СЕРВЕР ---
 if __name__ == "__main__":
-    print("Бот омода аст!")
+    keep_alive()  # Оғози веб-сервер барои Render
+    print("Бот ва Веб-сервер фаъол шуданд!")
     bot.polling(none_stop=True)
