@@ -1,39 +1,68 @@
 import telebot
 from telebot import types
-import threading
 from flask import Flask
+import threading
 import os
 
-# 1. Танзими Flask барои Render
+# --- БАХШИ ВЕБ-СЕРВЕР (БАРОИ RENDER) ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Боти Сартарошхона фаъол аст!"
+    return "Barber Bot фаъол аст!"
 
-def run_web():
-    # Render одатан порти 10000-ро истифода мебарад
-    port = int(os.environ.get("PORT", 10000))
+def run():
+    port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# Оғози сервер дар риштаи алоҳида (Thread)
-threading.Thread(target=run_web).start()
+def keep_alive():
+    t = threading.Thread(target=run)
+    t.start()
 
-# 2. Танзими Бот
-TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8'
+# --- ТАНЗИМОТИ БОТ ---
+# ТОКЕНИ НАВЕ, КИ БАРОИ БАРБЕР ГИРИФТЕД, ИНҶО ГУЗОРЕД!
+TOKEN = 'ТОКЕНИ_НАВИ_ШУМО' 
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    # Тугмаҳои асосии поёнӣ
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("💇‍♂️ Хизматрасониҳо", "📅 Навбатгирӣ")
-    bot.send_message(message.chat.id, "Салом! Хуш омадед ба @Daler_barber_bot", reply_markup=markup)
+    markup.add("✂️ Хизматрасониҳо", "📅 Навбат гирифтан")
+    
+    welcome_text = f"Салом {message.from_user.first_name}! Хуш омадед ба BarberShop. Кадом хизматрасониро мехоҳед?"
+    bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
-@bot.message_handler(func=lambda m: m.text == "💇‍♂️ Хизматрасониҳо")
+@bot.message_handler(func=lambda message: message.text == "✂️ Хизматрасониҳо")
 def services(message):
-    bot.send_message(message.chat.id, "✂️ Нархнома:\nМӯйсарӣ - 30 сомонӣ")
+    # Тугмаҳои Inline (дар зери паём)
+    inline_markup = types.InlineKeyboardMarkup()
+    btn1 = types.InlineKeyboardButton("💇‍♂️ Сартарошӣ - 30 смн", callback_data="cut")
+    btn2 = types.InlineKeyboardButton("🧔 Ислоҳи риш - 20 смн", callback_data="beard")
+    inline_markup.add(btn1)
+    inline_markup.add(btn2)
+    
+    bot.send_message(message.chat.id, "Рӯйхати хизматрасониҳои мо:", reply_markup=inline_markup)
 
-# 3. Ба кор андохтани бот
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    if call.data == "cut":
+        bot.answer_callback_query(call.id, "Шумо Сартароширо интихоб кардед")
+        bot.send_message(call.message.chat.id, "Барои навбат гирифтан '📅 Навбат гирифтан'-ро пахш кунед.")
+    elif call.data == "beard":
+        bot.answer_callback_query(call.id, "Шумо Ислоҳи ришро интихоб кардед")
+        bot.send_message(call.message.chat.id, "Барои навбат гирифтан '📅 Навбат гирифтан'-ро пахш кунед.")
+
+@bot.message_handler(func=lambda message: message.text == "📅 Навбат гирифтан")
+def book(message):
+    msg = bot.send_message(message.chat.id, "Лутфан вақт ва рӯзи омаданатонро нависед (масалан: Душанбе, 14:00):")
+    bot.register_next_step_handler(msg, save_booking)
+
+def save_booking(message):
+    user_time = message.text
+    bot.send_message(message.chat.id, f"✅ Ташаккур! Мо шуморо соати {user_time} интизор мешавем.")
+    # Инҷо метавонед кодро илова кунед, ки ба админ хабар диҳад
+
 if __name__ == "__main__":
-    print("Бот кор карда истодааст...")
+    keep_alive()
     bot.polling(none_stop=True)
