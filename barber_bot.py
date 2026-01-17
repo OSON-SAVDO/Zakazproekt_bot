@@ -21,7 +21,7 @@ def keep_alive():
 
 # --- ТАНЗИМОТИ БОТ ---
 # ТОКЕНИ НАВЕ, КИ БАРОИ БАРБЕР ГИРИФТЕД, ИНҶО ГУЗОРЕД!
-TOKEN = 'ТОКЕНИ_НАВИ_ШУМО' 
+TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8' 
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
