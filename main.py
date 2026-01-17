@@ -3,7 +3,7 @@ from telebot import types
 
 # 1. ТОКЕН ВА ID-И ХУДРО ИНҶО ГУЗОРЕД
 TOKEN = '8589284419:AAFGfNgr8LjyCC40q7nuvAl7Aq-Y2f-JDT0'
-MY_ID = 123456789  # <--- ID-и худро аз боти @userinfobot гирифта, инҷо гузор!
+MY_ID = 5863448768  # <--- ID-и худро аз боти @userinfobot гирифта, инҷо гузор!
 
 bot = telebot.TeleBot(TOKEN)
 
