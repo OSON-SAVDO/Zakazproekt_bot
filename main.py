@@ -1,13 +1,32 @@
 import telebot
 from telebot import types
+from flask import Flask
+import threading
+import os
 
-# 1. ТОКЕН ВА ID-И ХУДРО ИНҶО ГУЗОРЕД
+# --- ҚИСМИ FLASK БАРОИ РЕНДЕР (Ислоҳи хатогии Port scan timeout) ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Бот фаъол аст!"
+
+def run():
+    # Render портро худаш медиҳад, мо онро аз система мегирем
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = threading.Thread(target=run)
+    t.start()
+
+# --- ТАНЗИМОТИ БОТ ---
 TOKEN = '8589284419:AAFGfNgr8LjyCC40q7nuvAl7Aq-Y2f-JDT0'
-MY_ID = 5863448768  # <--- ID-и худро аз боти @userinfobot гирифта, инҷо гузор!
+MY_ID = 5863448768 
 
 bot = telebot.TeleBot(TOKEN)
 
-# Истиноди расми ту аз GitHub
+# Истиноди расм аз GitHub
 PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_074704.jpg"
 
 @bot.message_handler(commands=['start'])
@@ -20,7 +39,6 @@ def start(message):
 
 @bot.message_handler(func=lambda message: message.text == "💰 Нархнома")
 def send_price(message):
-    # Фиристодани расм аз GitHub ҳангоми пахши тугмаи Нархнома
     caption_text = (
         "📊 **Нархномаи хизматрасониҳои мо:**\n\n"
         "1. Сохтани боти оддӣ — аз 100 сомонӣ\n"
@@ -76,4 +94,7 @@ def send_all_to_admin(message, user_order):
     except Exception as e:
         print(f"Хатогӣ: {e}")
 
-bot.polling(none_stop=True)
+# Пеш аз он ки бот ба кор дарояд, сервери Flask-ро фаъол мекунем
+if __name__ == "__main__":
+    keep_alive()
+    bot.polling(none_stop=True)
