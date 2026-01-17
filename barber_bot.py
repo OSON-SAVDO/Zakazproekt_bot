@@ -21,6 +21,9 @@ TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8'
 MY_ID = 5863448768 
 bot = telebot.TeleBot(TOKEN)
 
+# Истинод ба расми нархнома (шумо метавонед инро иваз кунед)
+PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_074704.jpg"
+
 bookings = {} 
 
 @bot.message_handler(commands=['start'])
@@ -28,29 +31,50 @@ def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("✂️ Хизматрасониҳо", "📅 Навбат гирифтан")
     markup.add("❌ Бекор кардани навбат")
-    bot.send_message(message.chat.id, f"Салом! Барои навбат гирифтан тугмаро пахш кунед.", reply_markup=markup)
+    bot.send_message(message.chat.id, f"Салом {message.from_user.first_name}! Ба BarberShop хуш омадед.", reply_markup=markup)
 
+# --- ИСЛОҲИ БАХШИ НАРХНОМА ---
+@bot.message_handler(func=lambda message: message.text == "✂️ Хизматрасониҳо")
+def show_services(message):
+    caption_text = (
+        "📊 **Нархномаи мо:**\n\n"
+        "💇‍♂️ Сартарошӣ — 30 смн\n"
+        "🧔 Ислоҳи риш — 20 смн\n"
+        "✨ Сурма ва ороиш — 10 смн\n\n"
+        "Барои навбат гирифтан тугмаи поёнро пахш кунед."
+    )
+    inline_markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("📅 Ҳозир навбат мегирам", callback_data="go_book")
+    inline_markup.add(btn)
+    
+    try:
+        bot.send_photo(message.chat.id, PHOTO_URL, caption=caption_text, parse_mode="Markdown", reply_markup=inline_markup)
+    except:
+        bot.send_message(message.chat.id, caption_text, parse_mode="Markdown", reply_markup=inline_markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "go_book")
+def callback_book(call):
+    bot.answer_callback_query(call.id)
+    ask_phone(call.message)
+
+# --- РАВАНДИ НАВБАТГИРӢ ---
 @bot.message_handler(func=lambda message: message.text == "📅 Навбат гирифтан")
 def ask_phone(message):
-    # Аввал аз муштарӣ рақами телефонашро мепурсем
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     button = types.KeyboardButton("📞 Фиристодани рақам", request_contact=True)
     markup.add(button)
-    msg = bot.send_message(message.chat.id, "Лутфан, аввал рақами телефонатонро бо тугмаи поён фиристед:", reply_markup=markup)
+    msg = bot.send_message(message.chat.id, "Лутфан, рақами телефонатонро бо тугмаи поён фиристед:", reply_markup=markup)
     bot.register_next_step_handler(msg, show_time_slots)
 
 def show_time_slots(message):
     if not message.contact:
-        bot.send_message(message.chat.id, "Лутфан рақами телефонро фиристед. Бе он навбат гирифтан мумкин нест.")
+        bot.send_message(message.chat.id, "❌ Хатогӣ: Лутфан тугмаи '📞 Фиристодани рақам'-ро пахш кунед.")
         return
 
     phone = message.contact.phone_number
     busy_slots = list(bookings.keys())
     
-    if not busy_slots:
-        busy_text = "Ҳоло ҳамаи вақтҳо холианд."
-    else:
-        busy_text = "⚠️ **Вақтҳои банд:**\n" + "\n".join([f"🔴 {slot}" for slot in busy_slots])
+    busy_text = "⚠️ **Вақтҳои банд:**\n" + "\n".join([f"🔴 {slot}" for slot in busy_slots]) if busy_slots else "Ҳоло ҳамаи вақтҳо холианд."
     
     msg = bot.send_message(message.chat.id, f"{busy_text}\n\nКадом вақт меоед? (масалан: 13:00):", reply_markup=types.ReplyKeyboardRemove())
     bot.register_next_step_handler(msg, final_booking, phone)
@@ -60,40 +84,50 @@ def final_booking(message, phone):
     user_id = message.from_user.id
     
     if user_time in bookings:
-        msg = bot.send_message(message.chat.id, "❌ Ин вақт банд шуд. Дигар вақт нависед:")
+        msg = bot.send_message(message.chat.id, "❌ Ин вақт банд аст. Дигар вақт нависед:")
         bot.register_next_step_handler(msg, final_booking, phone)
     else:
         bookings[user_time] = {"id": user_id, "phone": phone}
-        
-        # Хабар ба админ бо рақами телефон
-        admin_msg = (
-            f"📅 **НАВБАТИ НАВ!**\n\n"
-            f"👤 **Муштарӣ:** {message.from_user.first_name}\n"
-            f"📞 **Телефон:** `{phone}`\n"
-            f"⏰ **Вақт:** {user_time}\n"
-            f"🆔 **ID:** {user_id}"
-        )
-        bot.send_message(MY_ID, admin_msg, parse_mode="Markdown")
-        bot.send_message(message.chat.id, f"✅ Ташаккур! Соати {user_time} захира шуд.")
+        bot.send_message(MY_ID, f"📅 **НАВБАТИ НАВ!**\n👤: {message.from_user.first_name}\n📞: `{phone}`\n⏰: {user_time}\n🆔: {user_id}", parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"✅ Соати {user_time} захира шуд!")
 
-# --- ФАРМОНИ АДМИН БАРОИ ТОЗАКУНИИ ВАҚТ ---
+# --- БЕКОР КАРДАН ВА АДМИН ---
+@bot.message_handler(func=lambda message: message.text == "❌ Бекор кардани навбат")
+def cancel_booking(message):
+    user_id = message.from_user.id
+    user_slots = [time for time, data in bookings.items() if data["id"] == user_id]
+    
+    if not user_slots:
+        bot.send_message(message.chat.id, "Шумо навбати фаъол надоред.")
+    else:
+        markup = types.InlineKeyboardMarkup()
+        for slot in user_slots:
+            markup.add(types.InlineKeyboardButton(f"Тоза кардани {slot}", callback_data=f"del_{slot}"))
+        bot.send_message(message.chat.id, "Кадом навбатро бекор мекунед?", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('del_'))
+def delete_callback(call):
+    slot = call.data.split('_')[1]
+    if slot in bookings:
+        del bookings[slot]
+        bot.edit_message_text(f"✅ Навбати соати {slot} бекор шуд.", call.message.chat.id, call.message.message_id)
+        bot.send_message(MY_ID, f"🔔 Муштарӣ соати {slot}-ро холӣ кард.")
+
 @bot.message_handler(commands=['admin'])
 def admin_panel(message):
     if message.chat.id == MY_ID:
-        if not bookings:
-            bot.send_message(MY_ID, "Ҳоло ягон вақт банд нест.")
+        if not bookings: bot.send_message(MY_ID, "Вақтҳо холианд.")
         else:
             markup = types.InlineKeyboardMarkup()
-            for slot in bookings.keys():
-                markup.add(types.InlineKeyboardButton(f"❌ Холӣ кардани {slot}", callback_data=f"adm_del_{slot}"))
-            bot.send_message(MY_ID, "Рӯйхати вақтҳо:", reply_markup=markup)
+            for slot in bookings.keys(): markup.add(types.InlineKeyboardButton(f"❌ Холӣ кардани {slot}", callback_data=f"adm_del_{slot}"))
+            bot.send_message(MY_ID, "Рӯйхати навбатҳо:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('adm_del_'))
 def admin_del(call):
     slot = call.data.split('_')[2]
     if slot in bookings:
         del bookings[slot]
-        bot.edit_message_text(f"✅ Вақти соати {slot} ҳозир холӣ шуд.", call.message.chat.id, call.message.message_id)
+        bot.edit_message_text(f"✅ Соати {slot} холӣ шуд.", call.message.chat.id, call.message.message_id)
 
 if __name__ == "__main__":
     keep_alive()
