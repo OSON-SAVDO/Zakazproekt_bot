@@ -4,12 +4,12 @@ from flask import Flask
 import threading
 import os
 
-# --- БАХШИ ВЕБ-СЕРВЕР (БАРОИ RENDER) ---
+# --- БАХШИ FLASK БАРОИ RENDER ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Barber Bot фаъол аст!"
+    return "Бот фаъол аст!"
 
 def run():
     port = int(os.environ.get("PORT", 8080))
@@ -20,48 +20,67 @@ def keep_alive():
     t.start()
 
 # --- ТАНЗИМОТИ БОТ ---
-# ТОКЕНИ НАВЕ, КИ БАРОИ БАРБЕР ГИРИФТЕД, ИНҶО ГУЗОРЕД!
-TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8' 
+TOKEN = '8589284419:AAFGfNgr8LjyCC40q7nuvAl7Aq-Y2f-JDT0'
+MY_ID = 5863448768 
+
 bot = telebot.TeleBot(TOKEN)
+PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_074704.jpg"
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Тугмаҳои асосии поёнӣ
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("✂️ Хизматрасониҳо", "📅 Навбат гирифтан")
-    
-    welcome_text = f"Салом {message.from_user.first_name}! Хуш омадед ба BarberShop. Кадом хизматрасониро мехоҳед?"
-    bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
+    markup.add("💰 Нархнома", "📝 Фармоиш додан")
+    bot.send_message(message.chat.id, f"Салом {message.from_user.first_name}! Барои фармоиш тугмаро пахш кунед:", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == "✂️ Хизматрасониҳо")
-def services(message):
-    # Тугмаҳои Inline (дар зери паём)
-    inline_markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton("💇‍♂️ Сартарошӣ - 30 смн", callback_data="cut")
-    btn2 = types.InlineKeyboardButton("🧔 Ислоҳи риш - 20 смн", callback_data="beard")
-    inline_markup.add(btn1)
-    inline_markup.add(btn2)
-    
-    bot.send_message(message.chat.id, "Рӯйхати хизматрасониҳои мо:", reply_markup=inline_markup)
+@bot.message_handler(func=lambda message: message.text == "💰 Нархнома")
+def send_price(message):
+    caption_text = "📊 **Нархнома:**\n1. Бот - аз 100 смн\n2. Мағоза - аз 300 смн"
+    try:
+        bot.send_photo(message.chat.id, PHOTO_URL, caption=caption_text, parse_mode="Markdown")
+    except:
+        bot.send_message(message.chat.id, "Расми нархнома дастрас нест.")
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    if call.data == "cut":
-        bot.answer_callback_query(call.id, "Шумо Сартароширо интихоб кардед")
-        bot.send_message(call.message.chat.id, "Барои навбат гирифтан '📅 Навбат гирифтан'-ро пахш кунед.")
-    elif call.data == "beard":
-        bot.answer_callback_query(call.id, "Шумо Ислоҳи ришро интихоб кардед")
-        bot.send_message(call.message.chat.id, "Барои навбат гирифтан '📅 Навбат гирифтан'-ро пахш кунед.")
+@bot.message_handler(func=lambda message: message.text == "📝 Фармоиш додан")
+def ask_order(message):
+    msg = bot.send_message(message.chat.id, "Чӣ гуна бот лозим аст?")
+    bot.register_next_step_handler(msg, ask_phone)
 
-@bot.message_handler(func=lambda message: message.text == "📅 Навбат гирифтан")
-def book(message):
-    msg = bot.send_message(message.chat.id, "Лутфан вақт ва рӯзи омаданатонро нависед (масалан: Душанбе, 14:00):")
-    bot.register_next_step_handler(msg, save_booking)
+def ask_phone(message):
+    user_order = message.text
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add(types.KeyboardButton("📞 Фиристодани рақам", request_contact=True))
+    msg = bot.send_message(message.chat.id, "Рақаматонро фиристед:", reply_markup=markup)
+    bot.register_next_step_handler(msg, send_all_to_admin, user_order)
 
-def save_booking(message):
-    user_time = message.text
-    bot.send_message(message.chat.id, f"✅ Ташаккур! Мо шуморо соати {user_time} интизор мешавем.")
-    # Инҷо метавонед кодро илова кунед, ки ба админ хабар диҳад
+def send_all_to_admin(message, user_order):
+    if message.contact:
+        phone = message.contact.phone_number
+        user = message.from_user
+        admin_msg = (
+            f"🔔 **ФАРМОИШИ НАВ!**\n\n"
+            f"👤 **Муштарӣ:** {user.first_name}\n"
+            f"📞 **Телефон:** `{phone}`\n"
+            f"🆔 **ID:** {user.id}\n\n"
+            f"📝 **Фармоиш:** {user_order}"
+        )
+        # Бот ба шумо паём мефиристад
+        bot.send_message(MY_ID, admin_msg, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "✅ Фармоиш қабул шуд!")
+    else:
+        bot.send_message(message.chat.id, "Лутфан тугмаро пахш кунед.")
+
+# --- ФУНКСИЯИ ҶАВОБИ АДМИН ---
+@bot.message_handler(func=lambda message: message.reply_to_message is not None and message.chat.id == MY_ID)
+def reply_to_user(message):
+    try:
+        # Гирифтани ID-и муштарӣ аз паёми қаблӣ
+        reply_text = message.reply_to_message.text
+        target_user_id = reply_text.split("ID: ")[1].split("\n")[0].strip()
+        
+        bot.send_message(target_user_id, f"🔔 **Ҷавоби админ:**\n\n{message.text}")
+        bot.send_message(MY_ID, "✅ Ҷавоб фиристода шуд.")
+    except:
+        bot.send_message(MY_ID, "❌ Хатогӣ: ID-и муштарӣ ёфт нашуд. Ба паёми фармоиш 'Reply' кунед.")
 
 if __name__ == "__main__":
     keep_alive()
