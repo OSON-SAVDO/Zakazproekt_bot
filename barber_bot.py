@@ -21,7 +21,7 @@ def keep_alive():
 
 # --- ТАНЗИМОТИ БОТ ---
 # ДИҚҚАТ: Инҷо ТОКЕНИ НАВ-и боти барберро гузоред!
-TOKEN = 'ИНҶО_ТОКЕНИ_НАВИ_БАРБЕР_РО_ГУЗОРЕД' 
+TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8' 
 MY_ID = 5863448768 
 
 bot = telebot.TeleBot(TOKEN)
