@@ -21,8 +21,8 @@ TOKEN = '8290136480:AAF5fJMjTFbtSHcqAICBdsOGT_S_fzeD9v8'
 MY_ID = 5863448768 
 bot = telebot.TeleBot(TOKEN)
 
-# Истинод ба расми нархнома (шумо метавонед инро иваз кунед)
-PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_074704.jpg"
+# ИСТИНОДИ НАВИ ШУМО ВОРИД ШУД
+PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_152616.jpg"
 
 bookings = {} 
 
@@ -33,14 +33,14 @@ def start(message):
     markup.add("❌ Бекор кардани навбат")
     bot.send_message(message.chat.id, f"Салом {message.from_user.first_name}! Ба BarberShop хуш омадед.", reply_markup=markup)
 
-# --- ИСЛОҲИ БАХШИ НАРХНОМА ---
+# --- БАХШИ НАРХНОМА ---
 @bot.message_handler(func=lambda message: message.text == "✂️ Хизматрасониҳо")
 def show_services(message):
     caption_text = (
         "📊 **Нархномаи мо:**\n\n"
         "💇‍♂️ Сартарошӣ — 30 смн\n"
         "🧔 Ислоҳи риш — 20 смн\n"
-        "✨ Сурма ва ороиш — 10 смн\n\n"
+        "✨ Ороиши шах Бо маслихат- смн\n\n"
         "Барои навбат гирифтан тугмаи поёнро пахш кунед."
     )
     inline_markup = types.InlineKeyboardMarkup()
@@ -48,6 +48,7 @@ def show_services(message):
     inline_markup.add(btn)
     
     try:
+        # Истифодаи расми нав
         bot.send_photo(message.chat.id, PHOTO_URL, caption=caption_text, parse_mode="Markdown", reply_markup=inline_markup)
     except:
         bot.send_message(message.chat.id, caption_text, parse_mode="Markdown", reply_markup=inline_markup)
@@ -88,6 +89,7 @@ def final_booking(message, phone):
         bot.register_next_step_handler(msg, final_booking, phone)
     else:
         bookings[user_time] = {"id": user_id, "phone": phone}
+        # Рақами телефон ба админ меравад
         bot.send_message(MY_ID, f"📅 **НАВБАТИ НАВ!**\n👤: {message.from_user.first_name}\n📞: `{phone}`\n⏰: {user_time}\n🆔: {user_id}", parse_mode="Markdown")
         bot.send_message(message.chat.id, f"✅ Соати {user_time} захира шуд!")
 
