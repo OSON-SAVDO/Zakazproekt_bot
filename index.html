@@ -6,56 +6,62 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #scanner-container { height: 40%; position: relative; background: #000; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #scanner-container { height: 45%; position: relative; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #receipt { height: 60%; overflow-y: auto; padding: 15px; background: #fff; color: #333; border-radius: 20px 20px 0 0; }
-        .item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
-        .total { font-size: 22px; font-weight: bold; margin-top: 15px; color: #000; text-align: right; }
-        .scan-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 10px 20px; background: #00ff00; border: none; border-radius: 5px; cursor: pointer; z-index: 100; }
+        #receipt { height: 55%; overflow-y: auto; padding: 15px; background: white; color: black; border-radius: 20px 20px 0 0; }
+        .item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #ddd; font-size: 18px; }
+        .total-box { padding: 15px; font-size: 22px; font-weight: bold; text-align: right; background: #f8f8f8; border-top: 2px solid #333; }
+        .close-btn { position: absolute; top: 10px; right: 10px; background: red; color: white; border: none; padding: 10px; border-radius: 5px; z-index: 100; }
     </style>
 </head>
 <body>
+    <button class="close-btn" onclick="Telegram.WebApp.close()">❌ БАСТАН</button>
     <div id="scanner-container">
         <video id="video"></video>
-        <button id="start-btn" class="scan-btn">🎥 ОҒОЗИ СКАНЕР</button>
     </div>
     
     <div id="receipt">
-        <h3 style="margin-top: 0;">🛒 Чек:</h3>
         <div id="items-list"></div>
-        <div class="total">ҶАМЪ: <span id="total-sum">0</span> сомонӣ</div>
+        <div class="total-box">ҶАМЪ: <span id="total-sum">0</span> смн</div>
     </div>
 
     <script>
         const codeReader = new ZXing.BrowserMultiFormatReader();
-        let total = 0;
+        let totalSum = 0;
 
-        document.getElementById('start-btn').addEventListener('click', function() {
-            this.style.display = 'none';
-            startScanning();
+        codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
+            if (result) {
+                if (navigator.vibrate) navigator.vibrate(100);
+                sendToServer(result.text);
+            }
         });
 
-        function startScanning() {
-            codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
-                if (result) {
-                    if (navigator.vibrate) navigator.vibrate(100);
-                    processScan(result.text);
+        async function sendToServer(barcode) {
+            // Ирсоли маълумот ба Render бидуни пӯшидани саҳифа
+            try {
+                const response = await fetch('/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: barcode })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    const list = document.getElementById('items-list');
+                    const newItem = document.createElement('div');
+                    newItem.className = 'item';
+                    newItem.innerHTML = `<span>${data.name}</span> <b>${data.price} смн</b>`;
+                    list.prepend(newItem);
+                    
+                    totalSum += data.price;
+                    document.getElementById('total-sum').innerText = totalSum.toFixed(2);
+                } else if (data.status === 'new') {
+                    alert("Моли нав: " + barcode + ". Лутфан дар бот илова кунед.");
                 }
-            });
-        }
-
-        async function processScan(code) {
-            // Мо маълумотро ба бот мефиристем, вале саҳифаро намебандем
-            // Дар ин ҷо мо ба сервери худ запрос мефиристем (ин усули AJAX аст)
-            const botToken = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-';
-            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-            
-            // Барои ин интерфейс мо бояд функсияи махсусро дар main.py истифода барем
-            // Аммо барои ҳозир мо танҳо дар экран нишон медиҳем
-            Telegram.WebApp.sendData(code); 
-            // Эзоҳ: Telegram WebApp дар сурати sendData саҳифаро мебандад.
-            // Барои он ки саҳифа набандад, мо бояд "answerWebAppQuery"-ро истифода барем.
+            } catch (e) {
+                console.error("Хатогии ирсол");
+            }
         }
     </script>
 </body>
