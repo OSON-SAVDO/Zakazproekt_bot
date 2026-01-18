@@ -1,20 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
-    <style>
-        body { margin: 0; padding: 0; background: #000; color: white; text-align: center; font-family: sans-serif; }
-        video { width: 100%; height: auto; max-width: 400px; border-bottom: 2px solid #0088cc; }
-        .info { padding: 20px; }
-    </style>
 </head>
-<body>
-    <video id="video"></video>
-    <div class="info">
-        <h3>Камераро ба штрих-код наздик кунед</h3>
-    </div>
+<body style="text-align: center; background: #000; color: white;">
+    <video id="video" style="width: 100%; max-width: 400px;"></video>
     <script>
         const codeReader = new ZXing.BrowserMultiFormatReader();
         codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
