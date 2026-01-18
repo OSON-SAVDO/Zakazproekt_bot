@@ -1,7 +1,7 @@
 import telebot, sqlite3
 from telebot import types
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Китобхонаи зарурӣ барои пайвастшавӣ
+from flask_cors import CORS
 from threading import Thread
 from datetime import datetime
 
@@ -10,7 +10,7 @@ SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
-CORS(app) # Иҷозат додани пайвастшавӣ аз GitHub
+CORS(app)
 
 def get_db():
     conn = sqlite3.connect('shop.db', check_same_thread=False)
@@ -22,7 +22,7 @@ def init_db():
     cursor.execute('''CREATE TABLE IF NOT EXISTS products 
                       (code TEXT PRIMARY KEY, name TEXT, buy REAL, sell REAL, qty INTEGER)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS sales 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sell_price REAL, profit REAL, date TEXT)''')
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sell_price REAL, profit REAL, date TEXT, code TEXT)''')
     conn.commit()
     conn.close()
 
@@ -40,11 +40,11 @@ def scan_api():
             name, buy, sell, qty = res
             if qty > 0:
                 cursor.execute("UPDATE products SET qty=qty-1 WHERE code=?", (code,))
-                cursor.execute("INSERT INTO sales (name, sell_price, profit, date) VALUES (?, ?, ?, ?)", 
-                               (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d")))
+                cursor.execute("INSERT INTO sales (name, sell_price, profit, date, code) VALUES (?, ?, ?, ?, ?)", 
+                               (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d"), code))
                 conn.commit()
                 conn.close()
-                return jsonify({'status': 'ok', 'name': name, 'price': sell})
+                return jsonify({'status': 'ok', 'name': name, 'price': sell, 'code': code})
             conn.close()
             return jsonify({'status': 'error', 'message': 'Тамом шуд'})
         
@@ -53,16 +53,30 @@ def scan_api():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+@app.route('/remove_item', methods=['POST'])
+def remove_item():
+    try:
+        data = request.json
+        code = data.get('code')
+        conn = get_db()
+        cursor = conn.cursor()
+        # Баргардонидани мол ба склад
+        cursor.execute("UPDATE products SET qty=qty+1 WHERE code=?", (code,))
+        # Нест кардани фурӯши охирин бо ин код
+        cursor.execute("DELETE FROM sales WHERE id = (SELECT id FROM sales WHERE code=? ORDER BY id DESC LIMIT 1)", (code,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    # WebApp барои сканерҳо
     btn_sale = types.KeyboardButton("🟢 ФУРӮШ (КАССА)", web_app=types.WebAppInfo(SCANNER_URL))
     btn_add = types.KeyboardButton("🔵 ҚАБУЛИ МОЛ (ДОБ)", web_app=types.WebAppInfo(SCANNER_URL + "?mode=add"))
-    # Тугмаҳои оддӣ
     btn_report = types.KeyboardButton("📊 Ҳисоботи имрӯза")
     btn_stock = types.KeyboardButton("📦 Склад")
-    
     markup.add(btn_sale, btn_add)
     markup.add(btn_report, btn_stock)
     bot.send_message(message.chat.id, "Интихоб кунед:", reply_markup=markup)
