@@ -1,0 +1,131 @@
+import telebot
+from telebot import types
+import sqlite3
+from datetime import datetime
+
+# 1. ТОКЕНИ ХУДРО ДАР ИН ҶО ГУЗОРЕД
+TOKEN = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-hDE' 
+bot = telebot.TeleBot(TOKEN)
+
+# 2. СУРОҒАИ ШАХСИИ ШУМО АЗ GITHUB (ки ҳозир сохтед)
+# Масалан: https://oson.github.io/Zakazproekt_bot/
+SCANNER_URL = "СУРОҒАИ_GITHUB_Pages_ШУМО"
+
+# Сохтани Базаи маълумот
+def init_db():
+    conn = sqlite3.connect('shop.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS products 
+                      (barcode TEXT PRIMARY KEY, name TEXT, buy_price REAL, sell_price REAL)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS sales 
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, barcode TEXT, qty INTEGER, date TEXT)''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# Менюи асосӣ бо тугмаҳо
+def main_markup():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    
+    # Тугмаи Web App барои сканери шахсии шумо
+    web_app = types.WebAppInfo(SCANNER_URL)
+    btn_scan = types.KeyboardButton("📸 Сканер ва Фурӯш", web_app=web_app)
+    
+    btn_report = types.KeyboardButton("📊 Ҳисоботи имрӯза")
+    btn_add = types.KeyboardButton("➕ Иловаи маҳсулот")
+    
+    markup.add(btn_scan)
+    markup.add(btn_report, btn_add)
+    return markup
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(
+        message.chat.id, 
+        "Бот барои мағоза фаъол шуд!\n\n"
+        "1. Аввал молро илова кунед.\n"
+        "2. Баъд онро сканер кунед.", 
+        reply_markup=main_markup()
+    )
+
+# Қабули маълумот аз Сканери GitHub
+@bot.message_handler(content_types=['web_app_data'])
+def handle_scan(message):
+    barcode = message.web_app_data.data
+    conn = sqlite3.connect('shop.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, sell_price, buy_price FROM products WHERE barcode=?", (barcode,))
+    product = cursor.fetchone()
+    
+    if product:
+        name, sell, buy = product
+        today = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("INSERT INTO sales (barcode, qty, date) VALUES (?, ?, ?)", (barcode, 1, today))
+        conn.commit()
+        bot.send_message(message.chat.id, f"✅ ФУРӮХТА ШУД:\n📦 Мол: {name}\n💰 Нарх: {sell} сомонӣ")
+    else:
+        bot.send_message(message.chat.id, f"❌ Маҳсулот бо коди {barcode} дар база нест.\nАввал онро илова кунед.")
+    conn.close()
+
+# Қадами 1: Оғози иловаи маҳсулот
+@bot.message_handler(func=lambda message: message.text == "➕ Иловаи маҳсулот")
+def add_product_start(message):
+    msg = bot.send_message(
+        message.chat.id, 
+        "Маълумотро чунин фиристед (бо вергул):\n`Код, Ном, Нархи_Харид, Нархи_Фурӯш` \n\n"
+        "Мисол:\n`358291, Лазолван, 50, 55`", 
+        parse_mode="Markdown"
+    )
+    bot.register_next_step_handler(msg, process_add_product)
+
+# Қадами 2: Сабт дар база
+def process_add_product(message):
+    try:
+        data = message.text.split(',')
+        if len(data) < 4:
+            raise ValueError
+        
+        barcode = data[0].strip()
+        name = data[1].strip()
+        buy = float(data[2].strip())
+        sell = float(data[3].strip())
+        
+        conn = sqlite3.connect('shop.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO products VALUES (?, ?, ?, ?)", (barcode, name, buy, sell))
+        conn.commit()
+        conn.close()
+        bot.send_message(message.chat.id, f"✅ Маҳсулот илова шуд: {name}")
+    except:
+        bot.send_message(message.chat.id, "⚠️ Хатогӣ! Маълумотро дуруст фиристед. Мисол: 123, Ном, 10, 15")
+
+# Ҳисоботи фурӯш ва фоида
+@bot.message_handler(func=lambda message: message.text == "📊 Ҳисоботи имрӯза")
+def get_report(message):
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = sqlite3.connect('shop.db')
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT SUM(p.sell_price), SUM(p.sell_price - p.buy_price)
+        FROM sales s
+        JOIN products p ON s.barcode = p.barcode
+        WHERE s.date = ?
+    '''
+    cursor.execute(query, (today,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    total_sales = result[0] if result[0] else 0
+    total_profit = result[1] if result[1] else 0
+    
+    bot.send_message(
+        message.chat.id, 
+        f"📊 Ҳисоботи имрӯза ({today}):\n\n"
+        f"💰 Фурӯши умумӣ: {total_sales} сомонӣ\n"
+        f"📈 Фоидаи соф: {total_profit} сомонӣ"
+    )
+
+print("Бот дар Pydroid 3 фаъол шуд...")
+bot.polling(none_stop=True)
