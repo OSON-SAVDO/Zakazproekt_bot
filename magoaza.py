@@ -1,6 +1,7 @@
 import telebot, sqlite3
 from telebot import types
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Китобхонаи зарурӣ барои пайвастшавӣ
 from threading import Thread
 from datetime import datetime
 
@@ -9,6 +10,7 @@ SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
+CORS(app) # Иҷозат додани пайвастшавӣ аз GitHub
 
 def get_db():
     conn = sqlite3.connect('shop.db', check_same_thread=False)
@@ -26,40 +28,45 @@ def init_db():
 
 @app.route('/scan', methods=['POST'])
 def scan_api():
-    data = request.json
-    code = data.get('code')
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, buy, sell, qty FROM products WHERE code=?", (code,))
-    res = cursor.fetchone()
-    if res:
-        name, buy, sell, qty = res
-        if qty > 0:
-            cursor.execute("UPDATE products SET qty=qty-1 WHERE code=?", (code,))
-            cursor.execute("INSERT INTO sales (name, sell_price, profit, date) VALUES (?, ?, ?, ?)", 
-                           (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d")))
-            conn.commit()
+    try:
+        data = request.json
+        code = data.get('code')
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, buy, sell, qty FROM products WHERE code=?", (code,))
+        res = cursor.fetchone()
+        
+        if res:
+            name, buy, sell, qty = res
+            if qty > 0:
+                cursor.execute("UPDATE products SET qty=qty-1 WHERE code=?", (code,))
+                cursor.execute("INSERT INTO sales (name, sell_price, profit, date) VALUES (?, ?, ?, ?)", 
+                               (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d")))
+                conn.commit()
+                conn.close()
+                return jsonify({'status': 'ok', 'name': name, 'price': sell})
             conn.close()
-            return jsonify({'status': 'ok', 'name': name, 'price': sell})
+            return jsonify({'status': 'error', 'message': 'Тамом шуд'})
+        
         conn.close()
-        return jsonify({'status': 'error', 'message': 'Тамом шуд'})
-    conn.close()
-    return jsonify({'status': 'error', 'message': 'Мол нест'})
+        return jsonify({'status': 'error', 'message': 'Мол дар база нест'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    sale_web = types.WebAppInfo(SCANNER_URL)
-    add_web = types.WebAppInfo(SCANNER_URL + "?mode=add")
-    markup.add(
-        types.KeyboardButton("🟢 ФУРӮШ (КАССА)", web_app=sale_web),
-        types.KeyboardButton("🔵 ҚАБУЛИ МОЛ (ДОБ)", web_app=add_web),
-        types.KeyboardButton("📊 Ҳисоботи имрӯза"),
-        types.KeyboardButton("📦 Склад")
-    )
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    # WebApp барои сканерҳо
+    btn_sale = types.KeyboardButton("🟢 ФУРӮШ (КАССА)", web_app=types.WebAppInfo(SCANNER_URL))
+    btn_add = types.KeyboardButton("🔵 ҚАБУЛИ МОЛ (ДОБ)", web_app=types.WebAppInfo(SCANNER_URL + "?mode=add"))
+    # Тугмаҳои оддӣ
+    btn_report = types.KeyboardButton("📊 Ҳисоботи имрӯза")
+    btn_stock = types.KeyboardButton("📦 Склад")
+    
+    markup.add(btn_sale, btn_add)
+    markup.add(btn_report, btn_stock)
     bot.send_message(message.chat.id, "Интихоб кунед:", reply_markup=markup)
 
-# --- ИН ҶО ФУНКСИЯҲОИ ТУГМАҲОИ ШУМО КИ КОР НАМЕКАРДАНД ---
 @bot.message_handler(func=lambda m: m.text == "📊 Ҳисоботи имрӯза")
 def show_report(message):
     today = datetime.now().strftime("%Y-%m-%d")
@@ -82,10 +89,9 @@ def show_stock(message):
     if not rows:
         bot.send_message(message.chat.id, "Склад холӣ аст.")
     else:
-        res = "📦 Склад:\n" + "\n".join([f"• {r[0]}: {r[1]} дона ({r[2]} смн)" for r in rows])
+        res = "📦 Рӯйхати молҳо:\n" + "\n".join([f"• {r[0]}: {r[1]} дона ({r[2]} смн)" for r in rows])
         bot.send_message(message.chat.id, res)
 
-# --- МАНТИҚИ ҚАБУЛИ МОЛ ---
 @bot.message_handler(content_types=['web_app_data'])
 def handle_add(message):
     code = message.web_app_data.data
@@ -120,7 +126,7 @@ def save_product(message, code, name):
         cursor.execute("INSERT INTO products VALUES (?,?,?,?,?)", (code, name, b, s, int(q)))
         conn.commit(); conn.close()
         bot.send_message(message.chat.id, "✅ Илова шуд!")
-    except: bot.send_message(message.chat.id, "Хато!")
+    except: bot.send_message(message.chat.id, "Хато! Маълумотро дуруст ворид кунед.")
 
 @app.route('/')
 def h(): return "OK"
