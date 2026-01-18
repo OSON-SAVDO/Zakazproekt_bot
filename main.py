@@ -3,30 +3,35 @@ from telebot import types
 from flask import Flask
 import threading
 import os
+import logging
 
-# --- ҚИСМИ FLASK БАРОИ РЕНДЕР (Ислоҳи хатогии Port scan timeout) ---
+# 1. Танзими Логҳо (барои дидани хатогиҳо дар Render)
+logging.basicConfig(level=logging.INFO)
+
+# 2. ТАНЗИМОТИ FLASK (барои зинда нигоҳ доштани бот)
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Бот фаъол аст!"
+    return "Бот фаъол аст ва кор мекунад!"
 
 def run():
-    # Render портро худаш медиҳад, мо онро аз система мегирем
+    # Render худаш портро дар Environment Variables мефиристад
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = threading.Thread(target=run)
+    t.daemon = True  # Ин имкон медиҳад, ки сервер дар замина кор кунад
     t.start()
 
-# --- ТАНЗИМОТИ БОТ ---
+# 3. ТАНЗИМОТИ БОТ
 TOKEN = '8589284419:AAFGfNgr8LjyCC40q7nuvAl7Aq-Y2f-JDT0'
 MY_ID = 5863448768 
 
 bot = telebot.TeleBot(TOKEN)
 
-# Истиноди расм аз GitHub
+# Истиноди расм
 PHOTO_URL = "https://raw.githubusercontent.com/OSON-SAVDO/Zakazproekt_bot/main/Screenshot_20260117_074704.jpg"
 
 @bot.message_handler(commands=['start'])
@@ -92,9 +97,17 @@ def send_all_to_admin(message, user_order):
             bot.register_next_step_handler(message, send_all_to_admin, user_order)
             
     except Exception as e:
-        print(f"Хатогӣ: {e}")
+        logging.error(f"Хатогӣ ҳангоми фиристодани маълумот ба админ: {e}")
 
-# Пеш аз он ки бот ба кор дарояд, сервери Flask-ро фаъол мекунем
+# ИҶРОИ БАРНОМА
 if __name__ == "__main__":
+    # 1. Аввал серверро дар замина мебарорем
     keep_alive()
-    bot.polling(none_stop=True)
+    logging.info("Сервери Flask оғоз шуд.")
+    
+    # 2. Баъд ботро ба кор меандозем
+    try:
+        logging.info("Бот ба кор даромад...")
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    except Exception as e:
+        logging.error(f"Хатогии polling: {e}")
