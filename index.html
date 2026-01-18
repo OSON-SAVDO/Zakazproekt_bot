@@ -6,29 +6,23 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; color: white; text-align: center; }
-        video { width: 100%; height: auto; border-bottom: 2px solid #0088cc; }
-        .controls { padding: 20px; }
+        body { margin: 0; background: #000; color: white; text-align: center; overflow: hidden; }
+        video { width: 100vw; height: 100vh; object-fit: cover; }
+        .label { position: absolute; top: 10px; width: 100%; z-index: 10; background: rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
+    <div class="label">Камераро ба штрих-код наздик кунед</div>
     <video id="video"></video>
-    <div class="controls">
-        <p>Камераро ба штрих-код наздик кунед</p>
-    </div>
-
     <script>
         const codeReader = new ZXing.BrowserMultiFormatReader();
-        
-        // Кӯшиши фаъол кардани камераи ақиб
+        // Истифодаи facingMode: environment барои камераи ақиб
         codeReader.decodeFromVideoDevice({ facingMode: "environment" }, 'video', (result, err) => {
             if (result) {
                 Telegram.WebApp.sendData(result.text);
                 Telegram.WebApp.close();
             }
         });
-
-        // Барои боварӣ, ки WebApp омода аст
         Telegram.WebApp.ready();
     </script>
 </body>
