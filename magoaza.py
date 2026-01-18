@@ -1,8 +1,7 @@
-import telebot
+import telebot, sqlite3, time
 from telebot import types
 from flask import Flask
 from threading import Thread
-import time
 from datetime import datetime
 
 TOKEN = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-hDE'
@@ -11,28 +10,25 @@ SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
-# 1. БАЗАИ МОЛҲО (Штрих-код: [Ном, Харид, Фурӯш, Миқдор дар склад])
-# Мисол: "123": ["Нон", 2.0, 2.5, 100] -> 100 дона дар склад ҳаст
-PRODUCTS = {
-    "12345": ["Нон", 2.0, 2.5, 100]
-}
+# --- БАЗАИ МАЪЛУМОТ (SQLite) ---
+def get_db():
+    conn = sqlite3.connect('shop.db', check_same_thread=False)
+    return conn
 
-# РӮЙХАТИ ФУРЎШҲОИ ИМРӮЗА
-daily_sales = []
-user_states = {}
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS products 
+                      (code TEXT PRIMARY KEY, name TEXT, buy REAL, sell REAL, qty INTEGER)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS sales 
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sell_price REAL, profit REAL, date TEXT)''')
+    conn.commit()
+    conn.close()
 
 @app.route('/')
 def home(): return "Бот фаъол аст!"
 
 def run(): app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.daemon = True
-    t.start()
-
-bot.remove_webhook()
-time.sleep(1)
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -42,73 +38,90 @@ def start(message):
         types.KeyboardButton("📸 Сканер", web_app=web_app),
         types.KeyboardButton("📊 Ҳисоботи имрӯза"),
         types.KeyboardButton("➕ Иловаи мол"),
-        types.KeyboardButton("📦 Бақияи молҳо (Склад)")
+        types.KeyboardButton("📦 Склад")
     )
-    bot.send_message(message.chat.id, "Бот омода аст!", reply_markup=markup)
+    bot.send_message(message.chat.id, "Системаи склад ва фурӯш омода аст!", reply_markup=markup)
 
-# --- ИЛОВАИ МОЛИ НАВ (Бо миқдор) ---
-@bot.message_handler(func=lambda message: message.text == "➕ Иловаи мол")
-def add_product_start(message):
-    bot.send_message(message.chat.id, "Штрих-кодро нависед ё сканер кунед:")
-    user_states[message.chat.id] = {'step': 'wait_code'}
+# --- ИЛОВАИ МОЛ ---
+@bot.message_handler(func=lambda m: m.text == "➕ Иловаи мол")
+def add_start(message):
+    bot.send_message(message.chat.id, "Штрих-кодро нависед (ё сканер кунед):")
+    bot.register_next_step_handler(message, get_code)
 
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_code')
 def get_code(message):
-    user_states[message.chat.id].update({'code': message.text, 'step': 'wait_name'})
+    code = message.text
     bot.send_message(message.chat.id, "Номи мол:")
+    bot.register_next_step_handler(message, lambda m: get_name(m, code))
 
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_name')
-def get_name(message):
-    user_states[message.chat.id].update({'name': message.text, 'step': 'wait_buy'})
-    bot.send_message(message.chat.id, "Нархи харид:")
+def get_name(message, code):
+    name = message.text
+    bot.send_message(message.chat.id, "Харид, Фурӯш ва Миқдорро бо фосила нависед (масалан: 10 15 100):")
+    bot.register_next_step_handler(message, lambda m: save_product(m, code, name))
 
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_buy')
-def get_buy(message):
-    user_states[message.chat.id].update({'buy': float(message.text), 'step': 'wait_sell'})
-    bot.send_message(message.chat.id, "Нархи фурӯш:")
-
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_sell')
-def get_sell(message):
-    user_states[message.chat.id].update({'sell': float(message.text), 'step': 'wait_qty'})
-    bot.send_message(message.chat.id, "Миқдор (чанд дона ҳаст?):")
-
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_qty')
-def get_qty(message):
-    data = user_states[message.chat.id]
-    qty = int(message.text)
-    PRODUCTS[data['code']] = [data['name'], data['buy'], data['sell'], qty]
-    bot.send_message(message.chat.id, f"✅ Мол илова шуд: {data['name']}\n📦 Миқдор: {qty} дона")
-    user_states[message.chat.id] = {}
+def save_product(message, code, name):
+    try:
+        buy, sell, qty = map(float, message.text.split())
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO products VALUES (?, ?, ?, ?, ?)", (code, name, buy, sell, int(qty)))
+        conn.commit()
+        conn.close()
+        bot.send_message(message.chat.id, f"✅ {name} ба склад илова шуд!")
+    except:
+        bot.send_message(message.chat.id, "❌ Хато! Танҳо рақамҳоро бо фосила нависед.")
 
 # --- СКАНЕР ВА ФУРӮШ ---
 @bot.message_handler(content_types=['web_app_data'])
-def handle_scanner_data(message):
+def handle_scanner(message):
     code = message.web_app_data.data
-    if code in PRODUCTS:
-        name, buy, sell, qty = PRODUCTS[code]
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, buy, sell, qty FROM products WHERE code=?", (code,))
+    res = cursor.fetchone()
+    
+    if res:
+        name, buy, sell, qty = res
         if qty > 0:
-            PRODUCTS[code][3] -= 1  # Кам кардан аз склад
-            new_qty = PRODUCTS[code][3]
-            daily_sales.append({'name': name, 'profit': sell-buy})
-            bot.send_message(message.chat.id, f"✅ Фурӯхта шуд: {name}\n💰 Нарх: {sell}\n📦 Боқӣ дар склад: {new_qty} адад")
+            new_qty = qty - 1
+            cursor.execute("UPDATE products SET qty=? WHERE code=?", (new_qty, code))
+            cursor.execute("INSERT INTO sales (name, sell_price, profit, date) VALUES (?, ?, ?, ?)", 
+                           (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d")))
+            conn.commit()
+            bot.send_message(message.chat.id, f"✅ Фурӯхта шуд: {name}\n💰 Нарх: {sell}\n📦 Боқӣ: {new_qty} адад")
         else:
-            bot.send_message(message.chat.id, f"⚠️ Мол дар склад тамом шуд: {name}")
+            bot.send_message(message.chat.id, f"⚠️ Мол дар склад тамом шуд!")
     else:
-        bot.send_message(message.chat.id, f"❌ Коди {code} ёфт нашуд.")
+        bot.send_message(message.chat.id, f"❌ Мол бо коди {code} ёфт нашуд.")
+    conn.close()
 
 # --- ҲИСОБОТҲО ---
-@bot.message_handler(func=lambda message: True)
-def reports(message):
-    if message.text == "📊 Ҳисоботи имрӯза":
-        total_profit = sum(s['profit'] for s in daily_sales)
-        bot.send_message(message.chat.id, f"📈 Фоидаи имрӯза: {total_profit} сомонӣ\n🛍 Шумораи фурӯш: {len(daily_sales)} адад")
+@bot.message_handler(func=lambda m: m.text == "📊 Ҳисоботи имрӯза")
+def report(message):
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(sell_price), SUM(profit), COUNT(*) FROM sales WHERE date=?", (today,))
+    cash, profit, count = cursor.fetchone()
+    conn.close()
     
-    elif message.text == "📦 Бақияи молҳо (Склад)":
-        report = "📦 **Ҳолати склад:**\n"
-        for code, info in PRODUCTS.items():
-            report += f"• {info[0]}: {info[3]} адад боқӣ монд\n"
-        bot.send_message(message.chat.id, report, parse_mode="Markdown")
+    if count > 0:
+        bot.send_message(message.chat.id, f"📊 **Ҳисобот:**\n🛍 Фурӯш: {count} адад\n💵 Касса: {cash} сомонӣ\n💎 Фоида: {profit} сомонӣ", parse_mode="Markdown")
+    else:
+        bot.send_message(message.chat.id, "Имрӯз фурӯш нашудааст.")
+
+@bot.message_handler(func=lambda m: m.text == "📦 Склад")
+def show_stock(message):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, qty FROM products")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    res = "📦 **Бақияи склад:**\n"
+    for r in rows: res += f"• {r[0]}: {r[1]} адад\n"
+    bot.send_message(message.chat.id, res if rows else "Склад холӣ аст.")
 
 if __name__ == "__main__":
-    keep_alive()
+    init_db()
+    Thread(target=run).start()
     bot.polling(none_stop=True)
