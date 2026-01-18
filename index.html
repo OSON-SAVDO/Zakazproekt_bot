@@ -7,46 +7,34 @@
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-        .overlay { 
-            position: absolute; z-index: 10; 
-            border: 2px solid #0088cc; 
-            width: 250px; height: 250px; 
-            box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
-            border-radius: 10px;
-        }
-        .label { position: absolute; bottom: 30px; z-index: 20; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 8px; font-size: 14px; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+        .overlay { position: relative; z-index: 10; border: 2px solid #0088cc; width: 250px; height: 250px; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); border-radius: 15px; }
+        .label { position: absolute; bottom: 40px; z-index: 20; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 20px; }
     </style>
 </head>
 <body>
-    <video id="video"></video>
+    <video id="video" playsinline></video>
     <div class="overlay"></div>
-    <div class="label">Штрих-кодро ба чоркунҷа наздик кунед</div>
+    <div class="label">Штрих-кодро наздик кунед</div>
 
     <script>
         const codeReader = new ZXing.BrowserMultiFormatReader();
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
 
-        // Танзимоти соддатар барои пешгирӣ аз OverconstrainedError
-        const constraints = {
-            video: { facingMode: "environment" }
-        };
-
-        codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
-            if (result) {
-                Telegram.WebApp.sendData(result.text);
-                Telegram.WebApp.close();
-            }
-        }).catch((err) => {
-            // Агар боз хато диҳад, бо танзимоти автоматикӣ месанҷад
-            codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+        // Функсияи оғози камера бо танзимоти содда
+        function startScanner() {
+            codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
                 if (result) {
                     Telegram.WebApp.sendData(result.text);
                     Telegram.WebApp.close();
                 }
+            }).catch(err => {
+                console.error("Camera error:", err);
             });
-        });
+        }
+
+        startScanner();
     </script>
 </body>
 </html>
