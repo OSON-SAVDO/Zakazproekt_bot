@@ -6,30 +6,45 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #scanner-container { position: relative; width: 100%; height: 45%; background: #000; }
+        body { margin: 0; background: #f4f4f7; color: #333; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* Дизайни Камера */
+        #scanner-wrapper { position: relative; width: 100%; transition: all 0.3s; background: #000; }
+        .sale-view { height: 35%; }
+        .add-view { height: 100%; }
+        
         video { width: 100%; height: 100%; object-fit: cover; }
-        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #0088cc; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; z-index: 10; }
-        .btn-torch { position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; border-radius: 50%; z-index: 20; width: 45px; height: 45px; display: none; }
-        #interface { flex-grow: 1; background: white; color: black; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; }
-        #status-msg { font-size: 14px; text-align: center; color: #888; margin-bottom: 5px; }
+
+        /* Рамка (Чоркунҷаи майда) танҳо барои фурӯш */
+        .scan-frame { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 200px; height: 120px; border: 2px solid #00ff00; border-radius: 10px;
+            box-shadow: 0 0 0 2000px rgba(0,0,0,0.5); z-index: 5; display: none;
+        }
+
+        /* Интерфейси поён (Рӯйхат) */
+        #interface { flex-grow: 1; background: white; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; z-index: 10; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); }
         #items-list { flex-grow: 1; overflow-y: auto; }
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
-        .btn-del { color: #e74c3c; font-size: 20px; border: none; background: none; cursor: pointer; }
-        .total-box { border-top: 2px solid #333; padding-top: 10px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; }
-        .loading { color: orange; font-weight: bold; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; background: #fff; margin-bottom: 5px; border-radius: 8px; }
+        .btn-del { color: #ff4d4d; border: 1px solid #ff4d4d; background: none; border-radius: 5px; padding: 5px 10px; font-weight: bold; }
+        
+        .total-box { border-top: 2px solid #333; padding-top: 10px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; color: #2c3e50; }
+        
+        .controls { position: absolute; top: 10px; right: 10px; z-index: 20; }
+        .btn-torch { background: rgba(255,255,255,0.8); border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px; }
     </style>
 </head>
 <body>
 
-<div id="scanner-container">
+<div id="scanner-wrapper">
     <video id="video" playsinline muted autoplay></video>
-    <button id="btn-start" class="btn-start">📸 ОҒОЗИ СКАНЕР</button>
-    <button id="btn-torch" class="btn-torch">🔦</button>
+    <div id="frame" class="scan-frame"></div>
+    <div class="controls">
+        <button id="btn-torch" class="btn-torch">🔦</button>
+    </div>
 </div>
 
 <div id="interface">
-    <div id="status-msg">Тайёр барои сканер</div>
     <div id="items-list"></div>
     <div id="total-area" class="total-box">
         <span>ҶАМЪ:</span>
@@ -40,93 +55,78 @@
 <script>
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
-    const SERVER_URL = "https://zakazproekt-bot-4.onrender.com"; 
+    const SERVER_URL = "https://zakazproekt-bot-4.onrender.com";
 
-    let isScanning = false;
-    let isTorchOn = false;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAddMode = urlParams.get('mode') === 'add';
 
-    document.getElementById('btn-start').onclick = function() {
-        this.style.display = 'none';
-        document.getElementById('btn-torch').style.display = 'block';
-        startScanner();
-    };
+    const wrapper = document.getElementById('scanner-wrapper');
+    const interfaceDiv = document.getElementById('interface');
+    const frame = document.getElementById('frame');
 
-    document.getElementById('btn-torch').onclick = async function() {
-        const stream = document.getElementById('video').srcObject;
-        const track = stream.getVideoTracks()[0];
-        isTorchOn = !isTorchOn;
-        try { await track.applyConstraints({ advanced: [{ torch: isTorchOn }] }); } catch (e) {}
-    };
-
-    function startScanner() {
-        codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
-            if (result && !isScanning) {
-                isScanning = true; // Пешгирии сканери дубора то анҷоми дархост
-                if (navigator.vibrate) navigator.vibrate(100);
-                sendToApi(result.text);
-            }
-        });
+    if (isAddMode) {
+        wrapper.className = "add-view";
+        interfaceDiv.style.display = 'none';
+        frame.style.display = 'none';
+    } else {
+        wrapper.className = "sale-view";
+        frame.style.display = 'block';
     }
 
+    // Оғози автоматии камера
+    codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
+        if (result) {
+            if (navigator.vibrate) navigator.vibrate(100);
+            if (isAddMode) {
+                tg.sendData(result.text); // Саҳифа баста мешавад
+            } else {
+                sendToApi(result.text);
+            }
+        }
+    });
+
     async function sendToApi(barcode) {
-        const msg = document.getElementById('status-msg');
-        msg.innerHTML = '<span class="loading">⏳ Интизор шавед, маълумот фиристода истодааст...</span>';
-
         try {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), 10000); // 10 сония вақт медиҳем
-
             const response = await fetch(`${SERVER_URL}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: barcode }),
-                signal: controller.signal
+                body: JSON.stringify({ code: barcode })
             });
-            clearTimeout(id);
             const data = await response.json();
-            
             if (data.status === 'ok') {
-                msg.innerText = "✅ Мол ёфт шуд!";
-                addItemToList(data.name, data.price, data.code);
-            } else {
-                msg.innerText = "❌ Хато: " + data.message;
+                const list = document.getElementById('items-list');
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `<div><b>${data.name}</b><br>${data.price} смн</div>
+                                 <button class="btn-del" onclick="removeItem(this, '${data.code}', ${data.price})">❌</button>`;
+                list.prepend(row);
+                let total = document.getElementById('total-sum');
+                total.innerText = (parseFloat(total.innerText) + data.price).toFixed(2);
             }
-        } catch (e) {
-            msg.innerText = "⚠️ Сервер дер ҷавоб дод. Навбат кунед ва боз кӯшиш кунед.";
-        } finally {
-            setTimeout(() => { isScanning = false; msg.innerText = "Тайёр барои сканер"; }, 1500);
-        }
-    }
-
-    function addItemToList(name, price, code) {
-        const list = document.getElementById('items-list');
-        const row = document.createElement('div');
-        row.className = 'item-row';
-        row.innerHTML = `
-            <div><span>${name}</span><br><b>${price.toFixed(2)} смн</b></div>
-            <button class="btn-del" onclick="removeItem(this, '${code}', ${price})">❌</button>
-        `;
-        list.prepend(row);
-        let total = document.getElementById('total-sum');
-        total.innerText = (parseFloat(total.innerText) + price).toFixed(2);
+        } catch (e) { console.error(e); }
     }
 
     async function removeItem(btn, code, price) {
-        if (!confirm("Нест кунам?")) return;
-        try {
-            const response = await fetch(`${SERVER_URL}/remove_item`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: code })
-            });
-            const data = await response.json();
-            if (data.status === 'ok') {
-                btn.parentElement.remove();
-                let total = document.getElementById('total-sum');
-                total.innerText = (parseFloat(total.innerText) - price).toFixed(2);
-            }
-        } catch (e) { alert("Хато!"); }
+        const response = await fetch(`${SERVER_URL}/remove_item`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+        if (response.ok) {
+            btn.parentElement.remove();
+            let total = document.getElementById('total-sum');
+            total.innerText = (parseFloat(total.innerText) - price).toFixed(2);
+        }
     }
+
+    // Фонарик
+    let isTorchOn = false;
+    document.getElementById('btn-torch').onclick = async () => {
+        const stream = document.getElementById('video').srcObject;
+        const track = stream.getVideoTracks()[0];
+        isTorchOn = !isTorchOn;
+        await track.applyConstraints({ advanced: [{ torch: isTorchOn }] });
+    };
 
     tg.ready();
     tg.expand();
