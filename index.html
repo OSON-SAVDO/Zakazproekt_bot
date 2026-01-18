@@ -1,87 +1,117 @@
 <!DOCTYPE html>
-<html>
+<html lang="tg">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
-        #scanner-container { position: relative; width: 100%; }
+        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #scanner-container { position: relative; width: 100%; height: 45%; background: #000; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #receipt-area { flex-grow: 1; background: white; color: black; padding: 15px; border-radius: 20px 20px 0 0; overflow-y: auto; }
-        .item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
-        .total { font-size: 22px; font-weight: bold; text-align: right; margin-top: 10px; }
-        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 25px; background: #0088cc; color: white; border: none; border-radius: 10px; font-weight: bold; z-index: 10; }
+        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #0088cc; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        #interface { flex-grow: 1; background: white; color: black; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column; }
+        .mode-badge { padding: 8px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 15px; font-size: 14px; }
+        .sale-style { background: #e9f7ef; color: #27ae60; border: 1px solid #27ae60; }
+        .add-style { background: #ebf5fb; color: #2980b9; border: 1px solid #2980b9; }
+        #items-list { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; font-size: 16px; }
+        .item-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .total-box { border-top: 2px solid #333; padding-top: 10px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
-    <div id="scanner-container">
-        <video id="video" playsinline muted autoplay></video>
-        <button id="btn-start" class="btn-start">📸 ОҒОЗИ СКАНЕР</button>
+
+<div id="scanner-container">
+    <video id="video" playsinline muted autoplay></video>
+    <button id="btn-start" class="btn-start">📸 ОҒОЗИ СКАНЕР</button>
+</div>
+
+<div id="interface">
+    <div id="mode-badge" class="mode-badge">Муайянкунӣ...</div>
+    
+    <div id="items-list">
+        </div>
+
+    <div id="total-area" class="total-box" style="display:none;">
+        <span>ҶАМЪ:</span>
+        <span><span id="total-sum">0.00</span> смн</span>
     </div>
-
-    <div id="receipt-area">
-        <div id="mode-text" style="font-weight: bold; margin-bottom: 10px; color: #666;"></div>
-        <div id="items-list"></div>
-        <div id="total-sum-box" class="total" style="display:none;">ҶАМЪ: <span id="total-val">0.00</span> смн</div>
+    
+    <div id="add-hint" style="display:none; text-align: center; color: #666;">
+        Молро сканер кунед. Саҳифа баста мешавад ва бот маълумотро мепурсад.
     </div>
+</div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        const codeReader = new ZXing.BrowserMultiFormatReader();
-        const urlParams = new URLSearchParams(window.location.search);
-        const isAddMode = urlParams.get('mode') === 'add';
+<script>
+    const tg = window.Telegram.WebApp;
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+    
+    // Режимро аз URL мефаҳмем
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAddMode = urlParams.get('mode') === 'add';
 
-        // Танзими интерфейс
-        const scannerBox = document.getElementById('scanner-container');
-        const modeText = document.getElementById('mode-text');
-        
-        if (isAddMode) {
-            scannerBox.style.height = "100vh"; // Дар режими илова - тамоми экран
-            document.getElementById('receipt-area').style.display = "none";
-            modeText.innerText = "РЕЖИМ: ИЛОВАИ МОЛ";
-        } else {
-            scannerBox.style.height = "40vh"; // Дар режими фурӯш - нисфи экран
-            document.getElementById('total-sum-box').style.display = "block";
-            modeText.innerText = "РЕЖИМ: ФУРӮШ";
-        }
+    // Танзими интерфейс вобаста ба режим
+    const badge = document.getElementById('mode-badge');
+    if (isAddMode) {
+        badge.innerText = "🔵 РЕЖИМ: ҚАБУЛИ МОЛ (ДОБ)";
+        badge.className = "mode-badge add-style";
+        document.getElementById('add-hint').style.display = 'block';
+        document.getElementById('scanner-container').style.height = "100%"; // Камера калонтар
+    } else {
+        badge.innerText = "🟢 РЕЖИМ: ФУРӮШ (КАССА)";
+        badge.className = "mode-badge sale-style";
+        document.getElementById('total-area').style.display = 'flex';
+    }
 
-        document.getElementById('btn-start').onclick = function() {
-            this.style.display = 'none';
-            start();
-        };
+    document.getElementById('btn-start').onclick = function() {
+        this.style.display = 'none';
+        startScanner();
+    };
 
-        function start() {
-            codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
-                if (result) {
-                    if (navigator.vibrate) navigator.vibrate(100);
-                    if (isAddMode) {
-                        tg.sendData(result.text); // Мебандад ва мефиристад
-                    } else {
-                        sendSale(result.text); // Намебандад
-                    }
+    function startScanner() {
+        codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
+            if (result) {
+                if (navigator.vibrate) navigator.vibrate(100);
+                
+                if (isAddMode) {
+                    // РЕЖИМИ ИЛОВА: Маълумотро ба бот мефиристем ва саҳифаро мебандем
+                    tg.sendData(result.text);
+                } else {
+                    // РЕЖИМИ ФУРӮШ: Ба сервер мефиристем (саҳифа намебандад)
+                    sendToApi(result.text);
                 }
+            }
+        });
+    }
+
+    async function sendToApi(barcode) {
+        try {
+            const response = await fetch('/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: barcode })
             });
-        }
+            const data = await response.json();
+            
+            if (data.status === 'ok') {
+                const list = document.getElementById('items-list');
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `<span>${data.name}</span><b>${data.price.toFixed(2)} смн</b>`;
+                list.prepend(row);
 
-        async function sendSale(code) {
-            try {
-                const res = await fetch('/scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: code })
-                });
-                const data = await res.json();
-                if (data.status === 'ok') {
-                    const list = document.getElementById('items-list');
-                    list.innerHTML = `<div class="item"><span>${data.name}</span><b>${data.price} смн</b></div>` + list.innerHTML;
-                    let t = parseFloat(document.getElementById('total-val').innerText);
-                    document.getElementById('total-val').innerText = (t + data.price).toFixed(2);
-                }
-            } catch (e) { console.error(e); }
+                let currentTotal = parseFloat(document.getElementById('total-sum').innerText);
+                document.getElementById('total-sum').innerText = (currentTotal + data.price).toFixed(2);
+            } else {
+                alert("Хато: " + (data.message || "Мол ёфт нашуд"));
+            }
+        } catch (e) {
+            alert("Хатогии пайваст бо сервер! Санҷед, ки Render фаъол аст.");
         }
-        tg.ready(); tg.expand();
-    </script>
+    }
+
+    tg.ready();
+    tg.expand();
+</script>
 </body>
 </html>
