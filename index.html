@@ -6,41 +6,43 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #scanner-container { height: 45%; position: relative; }
+        body { margin: 0; background: #000; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        #scanner-container { position: relative; width: 100%; height: 50%; background: #000; }
+        /* Ин сатр барои фаъол кардани камера дар iOS/Android муҳим аст */
         video { width: 100%; height: 100%; object-fit: cover; }
-        #receipt { height: 55%; overflow-y: auto; padding: 15px; background: white; color: black; border-radius: 20px 20px 0 0; }
-        .item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #ddd; font-size: 18px; }
-        .total-box { padding: 15px; font-size: 22px; font-weight: bold; text-align: right; background: #f8f8f8; border-top: 2px solid #333; }
-        .close-btn { position: absolute; top: 10px; right: 10px; background: red; color: white; border: none; padding: 10px; border-radius: 5px; z-index: 100; }
+        #receipt { flex-grow: 1; background: white; border-radius: 20px 20px 0 0; padding: 15px; color: black; overflow-y: auto; }
+        .total { font-size: 20px; font-weight: bold; border-top: 2px solid #eee; padding-top: 10px; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <button class="close-btn" onclick="Telegram.WebApp.close()">❌ БАСТАН</button>
+
     <div id="scanner-container">
-        <video id="video"></video>
+        <video id="video" playsinline muted autoplay></video>
     </div>
-    
+
     <div id="receipt">
+        <h3>🛒 Чек:</h3>
         <div id="items-list"></div>
-        <div class="total-box">ҶАМЪ: <span id="total-sum">0</span> смн</div>
+        <div class="total">ҶАМЪ: <span id="total-sum">0</span> смн</div>
     </div>
 
     <script>
         const codeReader = new ZXing.BrowserMultiFormatReader();
-        let totalSum = 0;
+        const videoElement = document.getElementById('video');
 
-        codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
+        // Оғози камера
+        codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
             if (result) {
-                if (navigator.vibrate) navigator.vibrate(100);
-                sendToServer(result.text);
+                if (navigator.vibrate) navigator.vibrate(50);
+                processScan(result.text);
             }
         });
 
-        async function sendToServer(barcode) {
-            // Ирсоли маълумот ба Render бидуни пӯшидани саҳифа
+        async function processScan(barcode) {
+            // Дар ин ҷо бояд суроғаи сервери Render-и шумо бошад
+            // Масалан: https://zakazproekt-bot-2.onrender.com/scan
             try {
-                const response = await fetch('/scan', {
+                const response = await fetch('https://zakazproekt-bot-2.onrender.com/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ code: barcode })
@@ -49,18 +51,15 @@
                 
                 if (data.status === 'ok') {
                     const list = document.getElementById('items-list');
-                    const newItem = document.createElement('div');
-                    newItem.className = 'item';
-                    newItem.innerHTML = `<span>${data.name}</span> <b>${data.price} смн</b>`;
-                    list.prepend(newItem);
+                    list.innerHTML += `<div style="display:flex; justify-content:space-between;">
+                        <span>${data.name}</span><b>${data.price} смн</b>
+                    </div>`;
                     
-                    totalSum += data.price;
-                    document.getElementById('total-sum').innerText = totalSum.toFixed(2);
-                } else if (data.status === 'new') {
-                    alert("Моли нав: " + barcode + ". Лутфан дар бот илова кунед.");
+                    let currentTotal = parseFloat(document.getElementById('total-sum').innerText);
+                    document.getElementById('total-sum').innerText = (currentTotal + data.price).toFixed(2);
                 }
             } catch (e) {
-                console.error("Хатогии ирсол");
+                console.log("Хатогии пайваст бо сервер");
             }
         }
     </script>
