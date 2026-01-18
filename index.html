@@ -6,62 +6,38 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        body { margin: 0; background: #000; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
         video { width: 100%; height: 100%; object-fit: cover; position: absolute; }
-        .box { 
-            position: relative; z-index: 10; width: 280px; height: 200px; 
-            border: 2px solid #00ff00; border-radius: 15px;
-            box-shadow: 0 0 0 1000px rgba(0,0,0,0.6);
-        }
-        .line {
-            position: absolute; width: 100%; height: 2px; background: #00ff00;
-            top: 50%; left: 0; box-shadow: 0 0 10px #00ff00;
-            animation: move 1.5s infinite linear;
-        }
-        @keyframes move { 0% { top: 10%; } 50% { top: 90%; } 100% { top: 10%; } }
+        .overlay { position: relative; z-index: 10; width: 250px; height: 250px; border: 2px solid #00ff00; border-radius: 10px; box-shadow: 0 0 0 1000px rgba(0,0,0,0.6); pointer-events: none; }
+        #start-btn { position: absolute; z-index: 100; padding: 15px 30px; font-size: 18px; background: #00ff00; border: none; border-radius: 10px; color: black; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
-    <video id="video" playsinline></video>
-    <div class="box"><div class="line"></div></div>
+    <button id="start-btn">🎥 ПАХШ КУНЕД БАРОИ СКАНЕР</button>
+    <video id="video" playsinline muted></video>
+    <div class="overlay"></div>
 
     <script>
         const codeReader = new ZXing.BrowserMultiFormatReader();
+        const startBtn = document.getElementById('start-btn');
+        
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
 
-        async function initScanner() {
-            try {
-                const videoDevices = await codeReader.listVideoInputDevices();
-                
-                // Кӯшиши ёфтани камераи пушт аз рӯи ном ё хусусият
-                let selectedDeviceId = videoDevices[0].deviceId;
-                for (const device of videoDevices) {
-                    if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear')) {
-                        selectedDeviceId = device.deviceId;
-                        break;
-                    }
+        startBtn.addEventListener('click', () => {
+            startBtn.style.display = 'none'; // Тугмаро нест мекунад
+            
+            // Оддитарин роҳи кушодани камера
+            codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
+                if (result) {
+                    if (navigator.vibrate) navigator.vibrate(100);
+                    Telegram.WebApp.sendData(result.text);
+                    Telegram.WebApp.close();
                 }
-
-                codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
-                    if (result) {
-                        if (navigator.vibrate) navigator.vibrate(100);
-                        Telegram.WebApp.sendData(result.text);
-                        Telegram.WebApp.close();
-                    }
-                });
-            } catch (err) {
-                // Агар роҳи боло кор накунад, усули автоматикиро истифода мебарад
-                codeReader.decodeFromConstraints({ video: { facingMode: "environment" } }, 'video', (result, err) => {
-                    if (result) {
-                        Telegram.WebApp.sendData(result.text);
-                        Telegram.WebApp.close();
-                    }
-                });
-            }
-        }
-
-        initScanner();
+            }).catch(err => {
+                alert("Хатогии камера: " + err);
+            });
+        });
     </script>
 </body>
 </html>
