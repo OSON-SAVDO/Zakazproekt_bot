@@ -28,17 +28,13 @@
 
 <div id="interface">
     <div id="mode-badge" class="mode-badge">Муайянкунӣ...</div>
-    
-    <div id="items-list">
-        </div>
-
+    <div id="items-list"></div>
     <div id="total-area" class="total-box" style="display:none;">
         <span>ҶАМЪ:</span>
         <span><span id="total-sum">0.00</span> смн</span>
     </div>
-    
     <div id="add-hint" style="display:none; text-align: center; color: #666;">
-        Молро сканер кунед. Саҳифа баста мешавад ва бот маълумотро мепурсад.
+        Молро сканер кунед. Саҳифа баста мешавад.
     </div>
 </div>
 
@@ -46,17 +42,17 @@
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
     
-    // Режимро аз URL мефаҳмем
+    // МУҲИМ: Суроғаи сервери шумо дар Render
+    const SERVER_URL = "https://zakazproekt-bot-2.onrender.com";
+
     const urlParams = new URLSearchParams(window.location.search);
     const isAddMode = urlParams.get('mode') === 'add';
 
-    // Танзими интерфейс вобаста ба режим
     const badge = document.getElementById('mode-badge');
     if (isAddMode) {
         badge.innerText = "🔵 РЕЖИМ: ҚАБУЛИ МОЛ (ДОБ)";
         badge.className = "mode-badge add-style";
         document.getElementById('add-hint').style.display = 'block';
-        document.getElementById('scanner-container').style.height = "100%"; // Камера калонтар
     } else {
         badge.innerText = "🟢 РЕЖИМ: ФУРӮШ (КАССА)";
         badge.className = "mode-badge sale-style";
@@ -72,12 +68,9 @@
         codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
             if (result) {
                 if (navigator.vibrate) navigator.vibrate(100);
-                
                 if (isAddMode) {
-                    // РЕЖИМИ ИЛОВА: Маълумотро ба бот мефиристем ва саҳифаро мебандем
                     tg.sendData(result.text);
                 } else {
-                    // РЕЖИМИ ФУРӮШ: Ба сервер мефиристем (саҳифа намебандад)
                     sendToApi(result.text);
                 }
             }
@@ -86,7 +79,8 @@
 
     async function sendToApi(barcode) {
         try {
-            const response = await fetch('/scan', {
+            // Истифодаи суроғаи пурраи SERVER_URL
+            const response = await fetch(`${SERVER_URL}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: barcode })
@@ -106,7 +100,7 @@
                 alert("Хато: " + (data.message || "Мол ёфт нашуд"));
             }
         } catch (e) {
-            alert("Хатогии пайваст бо сервер! Санҷед, ки Render фаъол аст.");
+            alert("Хатогии пайваст! Санҷед, ки сервер фаъол аст.");
         }
     }
 
