@@ -10,7 +10,6 @@ SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
-# --- БАЗАИ МАЪЛУМОТ (SQLite) ---
 def get_db():
     conn = sqlite3.connect('shop.db', check_same_thread=False)
     return conn
@@ -37,40 +36,12 @@ def start(message):
     markup.add(
         types.KeyboardButton("📸 Сканер", web_app=web_app),
         types.KeyboardButton("📊 Ҳисоботи имрӯза"),
-        types.KeyboardButton("➕ Иловаи мол"),
-        types.KeyboardButton("📦 Склад")
+        types.KeyboardButton("📦 Склад"),
+        types.KeyboardButton("❓ Кӯмак")
     )
-    bot.send_message(message.chat.id, "Системаи склад ва фурӯш омода аст!", reply_markup=markup)
+    bot.send_message(message.chat.id, "Системаи огоҳинома фаъол шуд! Агар мол аз 5 адад кам шавад, ман хабар медиҳам.", reply_markup=markup)
 
-# --- ИЛОВАИ МОЛ ---
-@bot.message_handler(func=lambda m: m.text == "➕ Иловаи мол")
-def add_start(message):
-    bot.send_message(message.chat.id, "Штрих-кодро нависед (ё сканер кунед):")
-    bot.register_next_step_handler(message, get_code)
-
-def get_code(message):
-    code = message.text
-    bot.send_message(message.chat.id, "Номи мол:")
-    bot.register_next_step_handler(message, lambda m: get_name(m, code))
-
-def get_name(message, code):
-    name = message.text
-    bot.send_message(message.chat.id, "Харид, Фурӯш ва Миқдорро бо фосила нависед (масалан: 10 15 100):")
-    bot.register_next_step_handler(message, lambda m: save_product(m, code, name))
-
-def save_product(message, code, name):
-    try:
-        buy, sell, qty = map(float, message.text.split())
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO products VALUES (?, ?, ?, ?, ?)", (code, name, buy, sell, int(qty)))
-        conn.commit()
-        conn.close()
-        bot.send_message(message.chat.id, f"✅ {name} ба склад илова шуд!")
-    except:
-        bot.send_message(message.chat.id, "❌ Хато! Танҳо рақамҳоро бо фосила нависед.")
-
-# --- СКАНЕР ВА ФУРӮШ ---
+# --- СКАНЕР ВА ФУРӮШ БО ОГОҲИНОМА ---
 @bot.message_handler(content_types=['web_app_data'])
 def handle_scanner(message):
     code = message.web_app_data.data
@@ -87,14 +58,39 @@ def handle_scanner(message):
             cursor.execute("INSERT INTO sales (name, sell_price, profit, date) VALUES (?, ?, ?, ?)", 
                            (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d")))
             conn.commit()
-            bot.send_message(message.chat.id, f"✅ Фурӯхта шуд: {name}\n💰 Нарх: {sell}\n📦 Боқӣ: {new_qty} адад")
+            
+            # Паёми фурӯш
+            bot.send_message(message.chat.id, f"✅ Фурӯхта шуд: {name}\n💰 Нарх: {sell} сомонӣ\n📦 Боқӣ: {new_qty} адад")
+            
+            # ОГОҲИНОМА БАРОИ КАМ МОНДАНИ МОЛ
+            if new_qty <= 5:
+                bot.send_message(message.chat.id, f"⚠️ **ДИҚҚАТ! МОЛ КАМ МОНД!**\n📦 Мол: {name}\n📉 Дар склад ҳамагӣ **{new_qty}** адад боқӣ мондааст!", parse_mode="Markdown")
         else:
-            bot.send_message(message.chat.id, f"⚠️ Мол дар склад тамом шуд!")
+            bot.send_message(message.chat.id, f"⚠️ Мол дар склад тамом шуд: {name}")
     else:
-        bot.send_message(message.chat.id, f"❌ Мол бо коди {code} ёфт нашуд.")
+        bot.send_message(message.chat.id, f"🆕 Моли нав бо коди {code}!\nЛутфан номи молро нависед:")
+        bot.register_next_step_handler(message, lambda m: get_new_name(m, code))
     conn.close()
 
-# --- ҲИСОБОТҲО ---
+# Функсияҳои иловакунӣ (ҳамчун коди пештара)
+def get_new_name(message, code):
+    name = message.text
+    bot.send_message(message.chat.id, f"Маълумоти '{name}'-ро нависед:\nХарид, Фурӯш ва Миқдор (бо фосила).\nМисол: 10 15 50")
+    bot.register_next_step_handler(message, lambda m: save_new_product(m, code, name))
+
+def save_new_product(message, code, name):
+    try:
+        buy, sell, qty = map(float, message.text.split())
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO products VALUES (?, ?, ?, ?, ?)", (code, name, buy, sell, int(qty)))
+        conn.commit()
+        conn.close()
+        bot.send_message(message.chat.id, f"✅ Мол илова ва захира шуд!\n📦 {name} - {int(qty)} адад")
+    except:
+        bot.send_message(message.chat.id, "❌ Хато! Маълумотро дуруст нависед (масалан: 10 15 50).")
+
+# Ҳисобот ва Склад (ҳамчун коди пештара)
 @bot.message_handler(func=lambda m: m.text == "📊 Ҳисоботи имрӯза")
 def report(message):
     today = datetime.now().strftime("%Y-%m-%d")
@@ -103,8 +99,7 @@ def report(message):
     cursor.execute("SELECT SUM(sell_price), SUM(profit), COUNT(*) FROM sales WHERE date=?", (today,))
     cash, profit, count = cursor.fetchone()
     conn.close()
-    
-    if count > 0:
+    if count and count > 0:
         bot.send_message(message.chat.id, f"📊 **Ҳисобот:**\n🛍 Фурӯш: {count} адад\n💵 Касса: {cash} сомонӣ\n💎 Фоида: {profit} сомонӣ", parse_mode="Markdown")
     else:
         bot.send_message(message.chat.id, "Имрӯз фурӯш нашудааст.")
@@ -116,7 +111,6 @@ def show_stock(message):
     cursor.execute("SELECT name, qty FROM products")
     rows = cursor.fetchall()
     conn.close()
-    
     res = "📦 **Бақияи склад:**\n"
     for r in rows: res += f"• {r[0]}: {r[1]} адад\n"
     bot.send_message(message.chat.id, res if rows else "Склад холӣ аст.")
