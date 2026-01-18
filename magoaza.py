@@ -5,25 +5,20 @@ from threading import Thread
 import time
 from datetime import datetime
 
-# ТОКЕНИ ШУМО
 TOKEN = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-hDE'
-# СУРОҒАИ ГИТҲАБ ПЕЙДЖСИ ШУМО
 SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
-# ID-и шумо (барои он ки танҳо шумо мол илова карда тавонед)
-ADMIN_ID = 5863448768 # Инро бо ID-и худатон иваз кунед, агар лозим бошад
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
-# БАЗАИ МОЛҲО ДАР ХОТИРА (Штрих-код: [Ном, Нархи Харид, Нархи Фурӯш])
+# 1. БАЗАИ МОЛҲО (Штрих-код: [Ном, Харид, Фурӯш, Миқдор дар склад])
+# Мисол: "123": ["Нон", 2.0, 2.5, 100] -> 100 дона дар склад ҳаст
 PRODUCTS = {
-    "12345": ["Нон", 2.0, 2.5]
+    "12345": ["Нон", 2.0, 2.5, 100]
 }
 
-# РӮЙХАТИ ФУРЎШҲО
+# РӮЙХАТИ ФУРЎШҲОИ ИМРӮЗА
 daily_sales = []
-
-# Барои ҳолати иловакунии мол
 user_states = {}
 
 @app.route('/')
@@ -43,72 +38,76 @@ time.sleep(1)
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     web_app = types.WebAppInfo(SCANNER_URL)
-    
     markup.add(
         types.KeyboardButton("📸 Сканер", web_app=web_app),
         types.KeyboardButton("📊 Ҳисоботи имрӯза"),
         types.KeyboardButton("➕ Иловаи мол"),
-        types.KeyboardButton("❓ Кӯмак")
+        types.KeyboardButton("📦 Бақияи молҳо (Склад)")
     )
-    bot.send_message(message.chat.id, f"Хуш омадед! Молро сканер кунед ё илова кунед.", reply_markup=markup)
+    bot.send_message(message.chat.id, "Бот омода аст!", reply_markup=markup)
 
-# --- ФУНКСИЯИ ИЛОВАИ МОЛИ НАВ (АДМИНКА) ---
+# --- ИЛОВАИ МОЛИ НАВ (Бо миқдор) ---
 @bot.message_handler(func=lambda message: message.text == "➕ Иловаи мол")
 def add_product_start(message):
-    bot.send_message(message.chat.id, "Лутфан, штрих-коди молро фиристед ё сканер кунед:")
+    bot.send_message(message.chat.id, "Штрих-кодро нависед ё сканер кунед:")
     user_states[message.chat.id] = {'step': 'wait_code'}
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_code')
 def get_code(message):
     user_states[message.chat.id].update({'code': message.text, 'step': 'wait_name'})
-    bot.send_message(message.chat.id, "Номи молро нависед:")
+    bot.send_message(message.chat.id, "Номи мол:")
 
 @bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_name')
 def get_name(message):
-    user_states[message.chat.id].update({'name': message.text, 'step': 'wait_buy_price'})
-    bot.send_message(message.chat.id, "Нархи харидро нависед (масалан: 5.50):")
+    user_states[message.chat.id].update({'name': message.text, 'step': 'wait_buy'})
+    bot.send_message(message.chat.id, "Нархи харид:")
 
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_buy_price')
+@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_buy')
 def get_buy(message):
-    user_states[message.chat.id].update({'buy': float(message.text), 'step': 'wait_sell_price'})
-    bot.send_message(message.chat.id, "Нархи фурӯшро нависед:")
+    user_states[message.chat.id].update({'buy': float(message.text), 'step': 'wait_sell'})
+    bot.send_message(message.chat.id, "Нархи фурӯш:")
 
-@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_sell_price')
+@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_sell')
 def get_sell(message):
+    user_states[message.chat.id].update({'sell': float(message.text), 'step': 'wait_qty'})
+    bot.send_message(message.chat.id, "Миқдор (чанд дона ҳаст?):")
+
+@bot.message_handler(func=lambda message: user_states.get(message.chat.id, {}).get('step') == 'wait_qty')
+def get_qty(message):
     data = user_states[message.chat.id]
-    sell_price = float(message.text)
-    
-    # Илова ба базаи PRODUCTS
-    PRODUCTS[data['code']] = [data['name'], data['buy'], sell_price]
-    
-    bot.send_message(message.chat.id, f"✅ Мол бомуваффақият илова шуд!\n📦 {data['name']}\n💰 Фурӯш: {sell_price} сомонӣ")
+    qty = int(message.text)
+    PRODUCTS[data['code']] = [data['name'], data['buy'], data['sell'], qty]
+    bot.send_message(message.chat.id, f"✅ Мол илова шуд: {data['name']}\n📦 Миқдор: {qty} дона")
     user_states[message.chat.id] = {}
 
-# --- СКАНЕР ВА ҲИСОБОТ ---
+# --- СКАНЕР ВА ФУРӮШ ---
 @bot.message_handler(content_types=['web_app_data'])
 def handle_scanner_data(message):
     code = message.web_app_data.data
     if code in PRODUCTS:
-        name, buy, sell = PRODUCTS[code]
-        daily_sales.append({'name': name, 'buy': buy, 'sell': sell, 'profit': sell-buy, 'time': datetime.now().strftime("%H:%M")})
-        bot.send_message(message.chat.id, f"✅ Фурӯхта шуд: {name}\n💰 Нарх: {sell} сомонӣ")
+        name, buy, sell, qty = PRODUCTS[code]
+        if qty > 0:
+            PRODUCTS[code][3] -= 1  # Кам кардан аз склад
+            new_qty = PRODUCTS[code][3]
+            daily_sales.append({'name': name, 'profit': sell-buy})
+            bot.send_message(message.chat.id, f"✅ Фурӯхта шуд: {name}\n💰 Нарх: {sell}\n📦 Боқӣ дар склад: {new_qty} адад")
+        else:
+            bot.send_message(message.chat.id, f"⚠️ Мол дар склад тамом шуд: {name}")
     else:
-        bot.send_message(message.chat.id, f"❌ Коди {code} ёфт нашуд. Тугмаи '➕ Иловаи мол'-ро пахш кунед.")
+        bot.send_message(message.chat.id, f"❌ Коди {code} ёфт нашуд.")
 
-@bot.message_handler(func=lambda message: message.text == "📊 Ҳисоботи имрӯза")
-def show_report(message):
-    if not daily_sales:
-        bot.send_message(message.chat.id, "Имрӯз ҳанӯз фурӯш нашудааст.")
-        return
+# --- ҲИСОБОТҲО ---
+@bot.message_handler(func=lambda message: True)
+def reports(message):
+    if message.text == "📊 Ҳисоботи имрӯза":
+        total_profit = sum(s['profit'] for s in daily_sales)
+        bot.send_message(message.chat.id, f"📈 Фоидаи имрӯза: {total_profit} сомонӣ\n🛍 Шумораи фурӯш: {len(daily_sales)} адад")
     
-    total_sell = sum(s['sell'] for s in daily_sales)
-    total_profit = sum(s['profit'] for s in daily_sales)
-    
-    report = f"📊 **Ҳисобот:**\n"
-    report += f"🔢 Шумораи фурӯш: {len(daily_sales)} адад\n"
-    report += f"💵 Маблағи умумӣ: {total_sell} сомонӣ\n"
-    report += f"💎 Фоидаи соф: {total_profit} сомонӣ"
-    bot.send_message(message.chat.id, report, parse_mode="Markdown")
+    elif message.text == "📦 Бақияи молҳо (Склад)":
+        report = "📦 **Ҳолати склад:**\n"
+        for code, info in PRODUCTS.items():
+            report += f"• {info[0]}: {info[3]} адад боқӣ монд\n"
+        bot.send_message(message.chat.id, report, parse_mode="Markdown")
 
 if __name__ == "__main__":
     keep_alive()
