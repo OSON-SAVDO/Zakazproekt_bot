@@ -33,16 +33,13 @@
         <span>ҶАМЪ:</span>
         <span><span id="total-sum">0.00</span> смн</span>
     </div>
-    <div id="add-hint" style="display:none; text-align: center; color: #666;">
-        Молро сканер кунед. Саҳифа баста мешавад.
-    </div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
     
-    // МУҲИМ: Суроғаи сервери шумо дар Render
+    // СУРОҒАИ СЕРВЕРИ ШУМО ДАР RENDER
     const SERVER_URL = "https://zakazproekt-bot-2.onrender.com";
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -52,7 +49,7 @@
     if (isAddMode) {
         badge.innerText = "🔵 РЕЖИМ: ҚАБУЛИ МОЛ (ДОБ)";
         badge.className = "mode-badge add-style";
-        document.getElementById('add-hint').style.display = 'block';
+        document.getElementById('scanner-container').style.height = "100%"; 
     } else {
         badge.innerText = "🟢 РЕЖИМ: ФУРӮШ (КАССА)";
         badge.className = "mode-badge sale-style";
@@ -79,7 +76,6 @@
 
     async function sendToApi(barcode) {
         try {
-            // Истифодаи суроғаи пурраи SERVER_URL
             const response = await fetch(`${SERVER_URL}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -100,7 +96,7 @@
                 alert("Хато: " + (data.message || "Мол ёфт нашуд"));
             }
         } catch (e) {
-            alert("Хатогии пайваст! Санҷед, ки сервер фаъол аст.");
+            alert("Хатогии пайваст бо сервер! Лутфан ботро аз нав кушоед.");
         }
     }
 
