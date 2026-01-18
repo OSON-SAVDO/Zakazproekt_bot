@@ -9,22 +9,15 @@
         body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #scanner-container { position: relative; width: 100%; height: 45%; background: #000; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #0088cc; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        
-        /* Тугмаи Фонарик */
-        .btn-torch { position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; border-radius: 50%; z-index: 20; width: 45px; height: 45px; font-size: 20px; display: none; }
-
+        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: #0088cc; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; z-index: 10; }
+        .btn-torch { position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; border-radius: 50%; z-index: 20; width: 45px; height: 45px; display: none; }
         #interface { flex-grow: 1; background: white; color: black; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; }
-        .mode-badge { padding: 8px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 10px; font-size: 14px; }
-        .sale-style { background: #e9f7ef; color: #27ae60; border: 1px solid #27ae60; }
-        .add-style { background: #ebf5fb; color: #2980b9; border: 1px solid #2980b9; }
-        
-        #items-list { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; }
+        #status-msg { font-size: 14px; text-align: center; color: #888; margin-bottom: 5px; }
+        #items-list { flex-grow: 1; overflow-y: auto; }
         .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
-        .item-row b { color: #27ae60; }
-        .btn-del { color: #e74c3c; font-size: 20px; border: none; background: none; padding: 0 10px; cursor: pointer; }
-
+        .btn-del { color: #e74c3c; font-size: 20px; border: none; background: none; cursor: pointer; }
         .total-box { border-top: 2px solid #333; padding-top: 10px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; }
+        .loading { color: orange; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -36,9 +29,9 @@
 </div>
 
 <div id="interface">
-    <div id="mode-badge" class="mode-badge">Муайянкунӣ...</div>
+    <div id="status-msg">Тайёр барои сканер</div>
     <div id="items-list"></div>
-    <div id="total-area" class="total-box" style="display:none;">
+    <div id="total-area" class="total-box">
         <span>ҶАМЪ:</span>
         <span><span id="total-sum">0.00</span> смн</span>
     </div>
@@ -47,22 +40,10 @@
 <script>
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
-    const SERVER_URL = "https://zakazproekt-bot-4.onrender.com"; // Иваз шуд ба bot-4
+    const SERVER_URL = "https://zakazproekt-bot-4.onrender.com"; 
 
+    let isScanning = false;
     let isTorchOn = false;
-    const urlParams = new URLSearchParams(window.location.search);
-    const isAddMode = urlParams.get('mode') === 'add';
-
-    const badge = document.getElementById('mode-badge');
-    if (isAddMode) {
-        badge.innerText = "🔵 РЕЖИМ: ҚАБУЛИ МОЛ (ДОБ)";
-        badge.className = "mode-badge add-style";
-        document.getElementById('scanner-container').style.height = "100%"; 
-    } else {
-        badge.innerText = "🟢 РЕЖИМ: ФУРӮШ (КАССА)";
-        badge.className = "mode-badge sale-style";
-        document.getElementById('total-area').style.display = 'flex';
-    }
 
     document.getElementById('btn-start').onclick = function() {
         this.style.display = 'none';
@@ -70,64 +51,68 @@
         startScanner();
     };
 
-    // ФУНКСИЯИ ФОНАРИК
     document.getElementById('btn-torch').onclick = async function() {
         const stream = document.getElementById('video').srcObject;
         const track = stream.getVideoTracks()[0];
         isTorchOn = !isTorchOn;
-        try {
-            await track.applyConstraints({ advanced: [{ torch: isTorchOn }] });
-        } catch (e) {
-            alert("Фонарик дар ин дастгоҳ кор намекунад");
-        }
+        try { await track.applyConstraints({ advanced: [{ torch: isTorchOn }] }); } catch (e) {}
     };
 
     function startScanner() {
         codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
-            if (result) {
+            if (result && !isScanning) {
+                isScanning = true; // Пешгирии сканери дубора то анҷоми дархост
                 if (navigator.vibrate) navigator.vibrate(100);
-                if (isAddMode) {
-                    tg.sendData(result.text);
-                } else {
-                    sendToApi(result.text);
-                }
+                sendToApi(result.text);
             }
         });
     }
 
     async function sendToApi(barcode) {
+        const msg = document.getElementById('status-msg');
+        msg.innerHTML = '<span class="loading">⏳ Интизор шавед, маълумот фиристода истодааст...</span>';
+
         try {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 10000); // 10 сония вақт медиҳем
+
             const response = await fetch(`${SERVER_URL}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: barcode })
+                body: JSON.stringify({ code: barcode }),
+                signal: controller.signal
             });
+            clearTimeout(id);
             const data = await response.json();
             
             if (data.status === 'ok') {
-                const list = document.getElementById('items-list');
-                const row = document.createElement('div');
-                row.className = 'item-row';
-                row.innerHTML = `
-                    <div><span>${data.name}</span><br><b>${data.price.toFixed(2)} смн</b></div>
-                    <button class="btn-del" onclick="removeItem(this, '${data.code}', ${data.price})">❌</button>
-                `;
-                list.prepend(row);
-
-                let currentTotal = parseFloat(document.getElementById('total-sum').innerText);
-                document.getElementById('total-sum').innerText = (currentTotal + data.price).toFixed(2);
+                msg.innerText = "✅ Мол ёфт шуд!";
+                addItemToList(data.name, data.price, data.code);
             } else {
-                tg.showAlert(data.message);
+                msg.innerText = "❌ Хато: " + data.message;
             }
         } catch (e) {
-            alert("Хатои пайваст!");
+            msg.innerText = "⚠️ Сервер дер ҷавоб дод. Навбат кунед ва боз кӯшиш кунед.";
+        } finally {
+            setTimeout(() => { isScanning = false; msg.innerText = "Тайёр барои сканер"; }, 1500);
         }
     }
 
-    // ФУНКСИЯИ НЕСТ КАРДАН
+    function addItemToList(name, price, code) {
+        const list = document.getElementById('items-list');
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.innerHTML = `
+            <div><span>${name}</span><br><b>${price.toFixed(2)} смн</b></div>
+            <button class="btn-del" onclick="removeItem(this, '${code}', ${price})">❌</button>
+        `;
+        list.prepend(row);
+        let total = document.getElementById('total-sum');
+        total.innerText = (parseFloat(total.innerText) + price).toFixed(2);
+    }
+
     async function removeItem(btn, code, price) {
-        if (!confirm("Ин молро аз чек нест кунам?")) return;
-        
+        if (!confirm("Нест кунам?")) return;
         try {
             const response = await fetch(`${SERVER_URL}/remove_item`, {
                 method: 'POST',
@@ -137,12 +122,10 @@
             const data = await response.json();
             if (data.status === 'ok') {
                 btn.parentElement.remove();
-                let currentTotal = parseFloat(document.getElementById('total-sum').innerText);
-                document.getElementById('total-sum').innerText = (currentTotal - price).toFixed(2);
+                let total = document.getElementById('total-sum');
+                total.innerText = (parseFloat(total.innerText) - price).toFixed(2);
             }
-        } catch (e) {
-            alert("Хато ҳангоми нест кардан");
-        }
+        } catch (e) { alert("Хато!"); }
     }
 
     tg.ready();
