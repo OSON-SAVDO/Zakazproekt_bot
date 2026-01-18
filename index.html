@@ -6,14 +6,13 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #scanner-container { height: 45%; position: relative; background: #000; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        #scanner-container { position: relative; width: 100%; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #interface { flex-grow: 1; background: white; color: black; border-radius: 20px 20px 0 0; padding: 15px; overflow-y: auto; }
-        .mode-badge { padding: 5px 10px; border-radius: 5px; font-weight: bold; margin-bottom: 10px; display: inline-block; }
-        .item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
-        .total { font-size: 20px; font-weight: bold; margin-top: 10px; text-align: right; }
-        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 12px 24px; background: #0088cc; color: white; border: none; border-radius: 10px; cursor: pointer; z-index: 100; }
+        #receipt-area { flex-grow: 1; background: white; color: black; padding: 15px; border-radius: 20px 20px 0 0; overflow-y: auto; }
+        .item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .total { font-size: 22px; font-weight: bold; text-align: right; margin-top: 10px; }
+        .btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 25px; background: #0088cc; color: white; border: none; border-radius: 10px; font-weight: bold; z-index: 10; }
     </style>
 </head>
 <body>
@@ -22,82 +21,67 @@
         <button id="btn-start" class="btn-start">📸 ОҒОЗИ СКАНЕР</button>
     </div>
 
-    <div id="interface">
-        <div id="mode-display" class="mode-badge"></div>
+    <div id="receipt-area">
+        <div id="mode-text" style="font-weight: bold; margin-bottom: 10px; color: #666;"></div>
         <div id="items-list"></div>
-        <div id="total-sum-container" class="total" style="display:none;">
-            ҶАМЪ: <span id="total-sum">0.00</span> смн
-        </div>
+        <div id="total-sum-box" class="total" style="display:none;">ҶАМЪ: <span id="total-val">0.00</span> смн</div>
     </div>
 
     <script>
-        const codeReader = new ZXing.BrowserMultiFormatReader();
         const tg = window.Telegram.WebApp;
-        tg.expand();
-
-        // Муайян кардани режим аз рӯи матни тугмаи бот
+        const codeReader = new ZXing.BrowserMultiFormatReader();
         const urlParams = new URLSearchParams(window.location.search);
-        // Мо метавонем режимро аз рӯи сарлавҳаи WebApp фаҳмем
-        let isSaleMode = true; 
+        const isAddMode = urlParams.get('mode') === 'add';
 
-        const modeDisplay = document.getElementById('mode-display');
+        // Танзими интерфейс
+        const scannerBox = document.getElementById('scanner-container');
+        const modeText = document.getElementById('mode-text');
         
-        // Барои автоматикӣ фаҳмидани режим
-        if (tg.initDataUnsafe.start_param === 'add') {
-            isSaleMode = false;
+        if (isAddMode) {
+            scannerBox.style.height = "100vh"; // Дар режими илова - тамоми экран
+            document.getElementById('receipt-area').style.display = "none";
+            modeText.innerText = "РЕЖИМ: ИЛОВАИ МОЛ";
+        } else {
+            scannerBox.style.height = "40vh"; // Дар режими фурӯш - нисфи экран
+            document.getElementById('total-sum-box').style.display = "block";
+            modeText.innerText = "РЕЖИМ: ФУРӮШ";
         }
-
-        modeDisplay.innerText = isSaleMode ? "🟢 РЕЖИМ: ФУРӮШ" : "🔵 РЕЖИМ: ҚАБУЛИ МОЛ";
-        modeDisplay.style.background = isSaleMode ? "#e9f7ef" : "#ebf5fb";
-        modeDisplay.style.color = isSaleMode ? "#27ae60" : "#2980b9";
-        if(isSaleMode) document.getElementById('total-sum-container').style.display = 'block';
 
         document.getElementById('btn-start').onclick = function() {
             this.style.display = 'none';
-            startScanner();
+            start();
         };
 
-        function startScanner() {
+        function start() {
             codeReader.decodeFromVideoDevice(undefined, 'video', (result, err) => {
                 if (result) {
                     if (navigator.vibrate) navigator.vibrate(100);
-                    
-                    if (isSaleMode) {
-                        // Дар режими фурӯш - саҳифа баста намешавад
-                        sendSaleData(result.text);
+                    if (isAddMode) {
+                        tg.sendData(result.text); // Мебандад ва мефиристад
                     } else {
-                        // Дар режими қабул - саҳифа баста мешавад ва маълумот ба бот меравад
-                        tg.sendData(result.text);
+                        sendSale(result.text); // Намебандад
                     }
                 }
             });
         }
 
-        async function sendSaleData(barcode) {
+        async function sendSale(code) {
             try {
-                const response = await fetch('/scan', {
+                const res = await fetch('/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: barcode })
+                    body: JSON.stringify({ code: code })
                 });
-                const data = await response.json();
-                
+                const data = await res.json();
                 if (data.status === 'ok') {
                     const list = document.getElementById('items-list');
-                    const item = document.createElement('div');
-                    item.className = 'item';
-                    item.innerHTML = `<span>${data.name}</span> <b>${data.price} смн</b>`;
-                    list.prepend(item);
-                    
-                    let currentTotal = parseFloat(document.getElementById('total-sum').innerText);
-                    document.getElementById('total-sum').innerText = (currentTotal + data.price).toFixed(2);
-                } else if (data.status === 'new') {
-                    alert("Моли нав! Барои илова кардан аз режими 'ҚАБУЛИ МОЛ' истифода баред.");
+                    list.innerHTML = `<div class="item"><span>${data.name}</span><b>${data.price} смн</b></div>` + list.innerHTML;
+                    let t = parseFloat(document.getElementById('total-val').innerText);
+                    document.getElementById('total-val').innerText = (t + data.price).toFixed(2);
                 }
-            } catch (e) {
-                alert("Хатогии пайваст бо сервер");
-            }
+            } catch (e) { console.error(e); }
         }
+        tg.ready(); tg.expand();
     </script>
 </body>
 </html>
