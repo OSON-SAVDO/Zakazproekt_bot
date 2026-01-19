@@ -8,11 +8,11 @@
     <style>
         body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Режими Фурӯш (Камера дар боло) */
+        /* Режими Фурӯш */
         .mode-sale #scanner-wrapper { height: 35%; position: relative; background: #000; border-bottom: 2px solid #00ff00; }
         .mode-sale .scan-frame { width: 200px; height: 110px; border: 2px solid #00ff00; }
 
-        /* Режими Қабул (Камера дар тамоми экран) */
+        /* Режими Қабул */
         .mode-add #scanner-wrapper { height: 100vh; position: absolute; width: 100%; z-index: 10; }
         .mode-add .scan-frame { width: 260px; height: 260px; border: 4px solid #007bff; }
         .mode-add #interface { display: none; }
@@ -25,6 +25,15 @@
 
         #interface { flex-grow: 1; background: white; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; z-index: 11; margin-top: -15px; box-shadow: 0 -5px 10px rgba(0,0,0,0.1); }
         #status { font-size: 14px; text-align: center; color: #555; margin-bottom: 10px; font-weight: bold; min-height: 20px; }
+        
+        /* Тугмаи Тозакунӣ */
+        .btn-clear { 
+            background: #ff4757; color: white; border: none; padding: 12px; 
+            border-radius: 10px; margin-bottom: 10px; font-weight: bold; 
+            font-size: 14px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .btn-clear:active { background: #ff6b81; }
+
         #items-list { flex-grow: 1; overflow-y: auto; }
         .item-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; background: #fff; animation: slideIn 0.3s ease; }
         .total-box { border-top: 3px solid #222; padding: 15px 0; font-size: 24px; font-weight: bold; display: flex; justify-content: space-between; color: #000; }
@@ -41,8 +50,11 @@
 
 <div id="interface">
     <div id="status">🔍 Интизори сканер...</div>
-    <div id="items-list">
-        </div>
+    
+    <button class="btn-clear" onclick="clearCheck()">🗑 ТОЗА КАРДАНИ ЧЕК</button>
+
+    <div id="items-list"></div>
+    
     <div class="total-box">
         <span>ҶАМЪ:</span>
         <span><span id="total-sum">0.00</span> смн</span>
@@ -52,23 +64,28 @@
 <script>
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
-    
-    // СУРОҒАИ СЕРВЕРИ ШУМО
     const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
 
     const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('mode'); // 'add' ё null
+    const mode = urlParams.get('mode'); 
     let isScanning = false;
 
-    // Танзими намуди зоҳирӣ вобаста ба тугмаи пахшшуда
     if (mode === 'add') {
         document.getElementById('body').className = 'mode-add';
+    }
+
+    // ФУНКСИЯИ НАВ: Тоза кардани экран
+    function clearCheck() {
+        if(confirm("Оё мехоҳед рӯйхати чекро тоза кунед?")) {
+            document.getElementById('items-list').innerHTML = "";
+            document.getElementById('total-sum').innerText = "0.00";
+            document.getElementById('status').innerText = "🧹 Чек тоза шуд";
+        }
     }
 
     async function initCamera() {
         try {
             const videoInputDevices = await codeReader.listVideoInputDevices();
-            // Интихоби камераи қафо (одатан охирин дар рӯйхат)
             const selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
 
             codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
@@ -77,10 +94,8 @@
                     if (navigator.vibrate) navigator.vibrate(100);
                     
                     if (mode === 'add') {
-                        // Режими Қабул: Танҳо кодро ба бот мефиристем
                         tg.sendData(result.text); 
                     } else {
-                        // Режими Фурӯш: Ба API-и сервер мефиристем
                         sendToApi(result.text);
                     }
                 }
@@ -119,9 +134,8 @@
                 status.innerHTML = `<span style="color:red;">❌ ${data.message}</span>`;
             }
         } catch (e) {
-            status.innerHTML = `<span style="color:red;">❌ Хатои пайваст бо сервер!</span>`;
+            status.innerHTML = `<span style="color:red;">❌ Хатои пайваст!</span>`;
         } finally {
-            // Баъди 2 сония сканерро боз фаъол мекунем
             setTimeout(() => { 
                 isScanning = false; 
                 if (mode !== 'add') status.innerText = "🔍 Тайёр барои мол"; 
