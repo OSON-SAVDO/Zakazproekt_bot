@@ -1,18 +1,74 @@
+<!DOCTYPE html>
+<html lang="tg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+        body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Режими Фурӯш */
+        .mode-sale #scanner-wrapper { height: 35%; position: relative; background: #000; border-bottom: 2px solid #00ff00; }
+        .mode-sale .scan-frame { width: 200px; height: 110px; border: 2px solid #00ff00; }
+
+        /* Режими Қабул */
+        .mode-add #scanner-wrapper { height: 100vh; position: absolute; width: 100%; z-index: 10; }
+        .mode-add .scan-frame { width: 260px; height: 260px; border: 4px solid #007bff; }
+        .mode-add #interface { display: none; }
+
+        #scanner-wrapper video { width: 100%; height: 100%; object-fit: cover; }
+        .scan-frame { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            border-radius: 15px; z-index: 5; box-shadow: 0 0 0 1000px rgba(0,0,0,0.6); pointer-events: none;
+        }
+
+        #interface { flex-grow: 1; background: white; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; z-index: 11; margin-top: -15px; box-shadow: 0 -5px 10px rgba(0,0,0,0.1); }
+        #status { font-size: 14px; text-align: center; color: #555; margin-bottom: 10px; font-weight: bold; min-height: 20px; }
+        
+        .btn-clear { 
+            background: #ff4757; color: white; border: none; padding: 12px; 
+            border-radius: 10px; margin-bottom: 10px; font-weight: bold; 
+            font-size: 14px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .btn-clear:active { background: #ff6b81; }
+
+        #items-list { flex-grow: 1; overflow-y: auto; }
+        .item-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; background: #fff; animation: slideIn 0.3s ease; }
+        .total-box { border-top: 3px solid #222; padding: 15px 0; font-size: 24px; font-weight: bold; display: flex; justify-content: space-between; color: #000; }
+        
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+    </style>
+</head>
+<body id="body" class="mode-sale">
+
 <audio id="beep-sound" preload="auto">
     <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
 </audio>
 
+<div id="scanner-wrapper">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="scan-frame"></div>
+</div>
+
+<div id="interface">
+    <div id="status">🔍 Интизори сканер...</div>
+    
+    <button class="btn-clear" onclick="clearCheck()">🗑 ТОЗА КАРДАНИ ЧЕК</button>
+
+    <div id="items-list"></div>
+    
+    <div class="total-box">
+        <span>ҶАМЪ:</span>
+        <span><span id="total-sum">0.00</span> смн</span>
+    </div>
+</div>
+
 <script>
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
+    // Истинод ба сервери шумо
     const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
-    
-    // Функсия барои садо додан
-    function playBeep() {
-        const sound = document.getElementById('beep-sound');
-        sound.currentTime = 0; // Садоро аз аввал оғоз мекунад
-        sound.play().catch(e => console.log("Садо фаъол нашуд:", e));
-    }
 
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode'); 
@@ -20,6 +76,21 @@
 
     if (mode === 'add') {
         document.getElementById('body').className = 'mode-add';
+    }
+
+    // Функсия барои пахши садо
+    function playBeep() {
+        const sound = document.getElementById('beep-sound');
+        sound.currentTime = 0;
+        sound.play().catch(e => console.log("Иҷозати садо дода нашуд:", e));
+    }
+
+    function clearCheck() {
+        if(confirm("Оё мехоҳед рӯйхати чекро тоза кунед?")) {
+            document.getElementById('items-list').innerHTML = "";
+            document.getElementById('total-sum').innerText = "0.00";
+            document.getElementById('status').innerText = "🧹 Чек тоза шуд";
+        }
     }
 
     async function initCamera() {
@@ -31,8 +102,8 @@
                 if (result && !isScanning) {
                     isScanning = true;
                     
-                    // Садо ва Вибратсия ҳангоми сканер
-                    playBeep(); 
+                    // Садо ва Вибратсия
+                    playBeep();
                     if (navigator.vibrate) navigator.vibrate(100);
                     
                     if (mode === 'add') {
@@ -48,5 +119,46 @@
         }
     }
 
-    // Қисми боқимондаи код (sendToApi ва ғайра) бетағйир мемонад...
+    async function sendToApi(barcode) {
+        const status = document.getElementById('status');
+        status.innerText = "⏳ Ҷустуҷӯ: " + barcode;
+        
+        try {
+            const response = await fetch(`${SERVER_URL}/scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: barcode })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'ok') {
+                const list = document.getElementById('items-list');
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `<span>${data.name}</span><b>${data.price.toFixed(2)} смн</b>`;
+                list.prepend(row);
+                
+                let total = document.getElementById('total-sum');
+                let newTotal = (parseFloat(total.innerText) + data.price).toFixed(2);
+                total.innerText = newTotal;
+                status.innerText = "✅ Мол илова шуд";
+            } else {
+                status.innerHTML = `<span style="color:red;">❌ ${data.message}</span>`;
+            }
+        } catch (e) {
+            status.innerHTML = `<span style="color:red;">❌ Хатои пайваст!</span>`;
+        } finally {
+            setTimeout(() => { 
+                isScanning = false; 
+                if (mode !== 'add') status.innerText = "🔍 Тайёр барои мол"; 
+            }, 2000);
+        }
+    }
+
+    tg.ready();
+    tg.expand();
+    initCamera();
 </script>
+</body>
+</html>
