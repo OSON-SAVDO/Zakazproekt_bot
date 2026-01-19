@@ -8,64 +8,68 @@
     <style>
         body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Менюи интихоб */
-        .mode-selector { display: flex; background: #2c3e50; padding: 10px; gap: 10px; }
-        .mode-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; }
-        .active-sale { background: #27ae60; }
-        .active-receive { background: #2980b9; }
+        /* Менюи интихоб дар боло */
+        .top-nav { display: flex; background: #222; padding: 5px; gap: 5px; z-index: 200; }
+        .mode-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; font-size: 12px; }
+        .btn-sale { background: #27ae60; }
+        .btn-receive { background: #2980b9; }
+        .active-mode { border: 2px solid white; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
 
-        /* Сканнер барои фурӯш */
-        .scanner-sale { height: 30%; position: relative; background: #000; border-bottom: 3px solid #27ae60; }
+        /* Контейнери умумии Сканнер */
+        #scanner-wrapper { position: relative; transition: all 0.3s ease; background: #000; overflow: hidden; }
         
-        /* Сканнер барои қабул (Экрани калон) */
-        .scanner-receive { height: 100%; position: absolute; top: 0; left: 0; width: 100%; z-index: 100; background: #000; }
-
-        .scan-frame { 
-            width: 220px; height: 130px; border: 3px solid #00ff00; 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            border-radius: 15px; z-index: 105; box-shadow: 0 0 0 2000px rgba(0,0,0,0.7); pointer-events: none; 
-        }
+        /* Сканнери ФУРӮШ (хурд) */
+        .mode-sale #scanner-wrapper { height: 35%; border-bottom: 3px solid #27ae60; }
+        
+        /* Сканнери ҚАБУЛ (Калон, тамоми экран) */
+        .mode-receive #scanner-wrapper { height: 100vh; position: absolute; top: 0; left: 0; width: 100%; z-index: 150; }
+        .mode-receive #interface { display: none; } /* Дар ҳолати қабул интерфейси поёнро пинҳон мекунем */
 
         #video { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Интерфейси поён */
-        #interface { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; margin-top: -15px; z-index: 10; }
-        
-        .item-row { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding: 10px; border-bottom: 1px solid #eee; 
-        }
-        .qty-controls { display: flex; align-items: center; gap: 10px; }
-        .qty-btn { 
-            width: 30px; height: 30px; border-radius: 50%; border: 1px solid #ccc; 
-            background: #f8f9fa; font-size: 18px; font-weight: bold; 
+        /* Чоркунҷаи сканер */
+        .scan-frame { 
+            width: 220px; height: 130px; border: 3px solid #00ff00; 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            border-radius: 15px; z-index: 160; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; 
         }
 
-        .hidden { display: none !important; }
-        .btn-close-receive { position: absolute; top: 20px; right: 20px; z-index: 110; background: red; color: white; border: none; padding: 10px; border-radius: 5px; }
+        /* Интерфейси поён барои Фурӯш */
+        #interface { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; margin-top: -15px; z-index: 10; position: relative; }
+        
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+        .qty-controls { display: flex; align-items: center; gap: 12px; }
+        .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: #e1e4e8; font-size: 20px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+        .btn-plus { background: #2ecc71; color: white; }
+        .btn-minus { background: #e74c3c; color: white; }
+
+        .total-box { font-size: 22px; font-weight: bold; border-top: 3px solid #222; padding-top: 10px; display: flex; justify-content: space-between; margin-top: auto; }
+        
+        .btn-back { position: absolute; top: 20px; right: 20px; z-index: 210; background: rgba(255,0,0,0.8); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: bold; }
+        .hidden { display: none; }
     </style>
 </head>
-<body id="body">
+<body class="mode-sale" id="main-body">
 
 <audio id="beep-success" preload="auto"><source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg"></audio>
 
-<div class="mode-selector">
-    <button class="mode-btn active-sale" onclick="setMode('sale')">🛒 ФУРӮШ</button>
-    <button class="mode-btn" id="btn-mode-receive" onclick="setMode('receive')">📦 ҚАБУЛИ МОЛ</button>
+<div class="top-nav">
+    <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="changeMode('sale')">🛒 ФУРӮШ</button>
+    <button id="nav-receive" class="mode-btn btn-receive" onclick="changeMode('receive')">📦 ҚАБУЛИ БОР</button>
 </div>
 
-<div id="scanner-container" class="scanner-sale">
-    <button id="close-receive" class="btn-close-receive hidden" onclick="setMode('sale')">X</button>
+<div id="scanner-wrapper">
+    <button id="back-to-sale" class="btn-back hidden" onclick="changeMode('sale')">← БАҚОФ</button>
     <video id="video" playsinline muted autoplay></video>
     <div class="scan-frame"></div>
 </div>
 
 <div id="interface">
-    <div id="status">🔔 Барои оғоз "🛒 Фурӯш"-ро пахш кунед</div>
+    <div id="items-list" style="flex-grow: 1; overflow-y: auto; margin-bottom: 10px;">
+        <div style="text-align: center; color: #999; margin-top: 20px;">Рӯйхати молҳо холӣ аст</div>
+    </div>
     
-    <div id="items-list" style="flex-grow: 1; overflow-y: auto;"></div>
-    
-    <div class="total-box" style="font-size: 20px; font-weight: bold; border-top: 2px solid #000; padding-top: 10px; display: flex; justify-content: space-between;">
+    <div class="total-box">
         <span>ҶАМЪ:</span>
         <span><span id="total-sum">0.00</span> смн</span>
     </div>
@@ -75,7 +79,7 @@
     const codeReader = new ZXing.BrowserMultiFormatReader();
     const sSuccess = document.getElementById('beep-success');
     let currentMode = 'sale';
-    let cart = {}; // Барои нигоҳ доштани молҳо ва миқдори онҳо
+    let cart = {};
 
     async function initCamera() {
         try {
@@ -83,32 +87,57 @@
             const deviceId = devices[devices.length - 1].deviceId;
             codeReader.decodeFromVideoDevice(deviceId, 'video', (result, err) => {
                 if (result) {
-                    sSuccess.play(); // Садои "Пик"
+                    sSuccess.play();
                     handleScan(result.text);
                 }
             });
-        } catch (e) { alert("Хатои камера: " + e); }
+        } catch (e) { console.error(e); }
     }
 
-    function setMode(mode) {
+    function changeMode(mode) {
         currentMode = mode;
-        const container = document.getElementById('scanner-container');
-        const closeBtn = document.getElementById('close-receive');
-        
+        const body = document.getElementById('main-body');
+        const backBtn = document.getElementById('back-to-sale');
+        const navSale = document.getElementById('nav-sale');
+        const navReceive = document.getElementById('nav-receive');
+
         if (mode === 'receive') {
-            container.className = 'scanner-receive';
-            closeBtn.classList.remove('hidden');
+            body.className = 'mode-receive';
+            backBtn.classList.remove('hidden');
+            navReceive.classList.add('active-mode');
+            navSale.classList.remove('active-mode');
         } else {
-            container.className = 'scanner-sale';
-            closeBtn.classList.add('hidden');
+            body.className = 'mode-sale';
+            backBtn.classList.add('hidden');
+            navSale.classList.add('active-mode');
+            navReceive.classList.remove('active-mode');
         }
     }
 
     async function handleScan(barcode) {
         // ИН ҶО БА СЕРВЕР ПАЙВАСТ МЕШАВЕМ
-        // Барои намуна, мо як моли сохтаро илова мекунем:
-        const mockData = { id: barcode, name: "Моли " + barcode, price: 15.50 };
-        addItemToCart(mockData);
+        try {
+            const response = await fetch(`https://zakazproekt-bot-2.onrender.com/scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: barcode, mode: currentMode })
+            });
+            const data = await response.json();
+
+            if (data.status === 'ok') {
+                if (currentMode === 'sale') {
+                    addItemToCart({ id: barcode, name: data.name, price: data.price });
+                } else {
+                    // Барои ҚАБУЛ метавонӣ танҳо паём нишон диҳӣ ё амали дигар кунӣ
+                    Telegram.WebApp.showAlert(`Моли "${data.name}" қабул шуд!`);
+                }
+            }
+        } catch (e) {
+            // Намуна барои санҷиш агар сервер кор накунад:
+            if (currentMode === 'sale') {
+                addItemToCart({ id: barcode, name: "Моли " + barcode, price: 10 });
+            }
+        }
     }
 
     function addItemToCart(product) {
@@ -143,21 +172,23 @@
             row.innerHTML = `
                 <div>
                     <div><b>${item.name}</b></div>
-                    <div style="font-size: 12px; color: #666;">${item.price.toFixed(2)} смн</div>
+                    <div style="font-size: 13px; color: #2ecc71;">${item.price.toFixed(2)} смн</div>
                 </div>
                 <div class="qty-controls">
-                    <button class="qty-btn" onclick="updateQty('${id}', -1)">-</button>
-                    <span>${item.qty}</span>
-                    <button class="qty-btn" onclick="updateQty('${id}', 1)">+</button>
-                    <b style="margin-left:10px;">${itemTotal.toFixed(2)}</b>
+                    <button class="qty-btn btn-minus" onclick="updateQty('${id}', -1)">−</button>
+                    <span style="min-width: 20px; text-align: center; font-weight: bold;">${item.qty}</span>
+                    <button class="qty-btn btn-plus" onclick="updateQty('${id}', 1)">+</button>
                 </div>
             `;
             list.appendChild(row);
         }
         document.getElementById('total-sum').innerText = total.toFixed(2);
+        if (Object.keys(cart).length === 0) {
+            list.innerHTML = '<div style="text-align: center; color: #999; margin-top: 20px;">Рӯйхати молҳо холӣ аст</div>';
+        }
     }
 
-    initCamera();
+    window.onload = initCamera;
 </script>
 </body>
 </html>
