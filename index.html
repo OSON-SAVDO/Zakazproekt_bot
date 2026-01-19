@@ -6,44 +6,41 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #f4f4f9; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Режими Фурӯш (Камераи хурд дар боло) */
-        .mode-sale #scanner-container { height: 35%; position: relative; background: #000; }
-        .mode-sale .scan-frame { width: 180px; height: 100px; border: 2px solid #00ff00; }
+        /* Режими Фурӯш (Камера дар боло) */
+        .mode-sale #scanner-wrapper { height: 35%; position: relative; background: #000; border-bottom: 2px solid #00ff00; }
+        .mode-sale .scan-frame { width: 200px; height: 110px; border: 2px solid #00ff00; }
 
-        /* Режими Қабул (Камераи калон дар байни экран) */
-        .mode-add #scanner-container { height: 100%; position: absolute; top: 0; left: 0; width: 100%; z-index: 10; }
-        .mode-add .scan-frame { width: 250px; height: 250px; border: 4px solid #007bff; }
-        .mode-add #interface { display: none; } /* Дар ҳолати қабул интерфейси фурӯш лозим нест */
+        /* Режими Қабул (Камера дар тамоми экран) */
+        .mode-add #scanner-wrapper { height: 100vh; position: absolute; width: 100%; z-index: 10; }
+        .mode-add .scan-frame { width: 260px; height: 260px; border: 4px solid #007bff; }
+        .mode-add #interface { display: none; }
 
-        #scanner-container video { width: 100%; height: 100%; object-fit: cover; }
+        #scanner-wrapper video { width: 100%; height: 100%; object-fit: cover; }
         .scan-frame { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             border-radius: 15px; z-index: 5; box-shadow: 0 0 0 1000px rgba(0,0,0,0.6); pointer-events: none;
         }
 
-        #interface { flex-grow: 1; background: white; border-radius: 25px 25px 0 0; padding: 20px; display: flex; flex-direction: column; z-index: 11; position: relative; margin-top: -20px; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); }
-        #status { font-size: 14px; font-weight: bold; text-align: center; color: #555; margin-bottom: 10px; }
+        #interface { flex-grow: 1; background: white; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; z-index: 11; margin-top: -15px; box-shadow: 0 -5px 10px rgba(0,0,0,0.1); }
+        #status { font-size: 14px; text-align: center; color: #555; margin-bottom: 10px; font-weight: bold; min-height: 20px; }
         #items-list { flex-grow: 1; overflow-y: auto; }
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; animation: fadeIn 0.3s; }
-        .item-info { display: flex; flex-direction: column; }
-        .item-name { font-weight: bold; font-size: 16px; }
-        .item-price { color: #28a745; font-size: 14px; }
-        .total-box { border-top: 3px solid #333; padding-top: 15px; margin-top: 10px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; color: #000; }
+        .item-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; background: #fff; animation: slideIn 0.3s ease; }
+        .total-box { border-top: 3px solid #222; padding: 15px 0; font-size: 24px; font-weight: bold; display: flex; justify-content: space-between; color: #000; }
         
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
     </style>
 </head>
-<body class="mode-sale" id="main-body">
+<body id="body" class="mode-sale">
 
-<div id="scanner-container">
+<div id="scanner-wrapper">
     <video id="video" playsinline muted autoplay></video>
     <div class="scan-frame"></div>
 </div>
 
 <div id="interface">
-    <div id="status">🔍 Тайёр барои сканер...</div>
+    <div id="status">🔍 Интизори сканер...</div>
     <div id="items-list">
         </div>
     <div class="total-box">
@@ -55,75 +52,80 @@
 <script>
     const tg = window.Telegram.WebApp;
     const codeReader = new ZXing.BrowserMultiFormatReader();
-    const SERVER_URL = "https://zakazproekt-bot-4.onrender.com"; // Суроғаи Render-и шумо
+    
+    // СУРОҒАИ СЕРВЕРИ ШУМО
+    const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
 
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode'); // 'add' ё null
     let isScanning = false;
 
-    // Танзими намуди зоҳирӣ вобаста ба режим
+    // Танзими намуди зоҳирӣ вобаста ба тугмаи пахшшуда
     if (mode === 'add') {
-        document.getElementById('main-body').className = 'mode-add';
+        document.getElementById('body').className = 'mode-add';
     }
 
     async function initCamera() {
         try {
-            const constraints = { video: { facingMode: "environment" } };
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            document.getElementById('video').srcObject = stream;
-            
-            codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+            const videoInputDevices = await codeReader.listVideoInputDevices();
+            // Интихоби камераи қафо (одатан охирин дар рӯйхат)
+            const selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
+
+            codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
                 if (result && !isScanning) {
                     isScanning = true;
                     if (navigator.vibrate) navigator.vibrate(100);
                     
                     if (mode === 'add') {
-                        // Дар режими қабул - танҳо кодро ба бот мефиристем
+                        // Режими Қабул: Танҳо кодро ба бот мефиристем
                         tg.sendData(result.text); 
                     } else {
-                        // Дар режими фурӯш - ба сервер мефиристем
+                        // Режими Фурӯш: Ба API-и сервер мефиристем
                         sendToApi(result.text);
                     }
                 }
             });
         } catch (e) {
-            alert("Хатои камера: " + e);
+            document.getElementById('status').innerText = "Хато дар камера!";
+            console.error(e);
         }
     }
 
     async function sendToApi(barcode) {
-        document.getElementById('status').innerText = "⏳ Ҷустуҷӯ...";
+        const status = document.getElementById('status');
+        status.innerText = "⏳ Ҷустуҷӯ: " + barcode;
+        
         try {
             const response = await fetch(`${SERVER_URL}/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: barcode })
             });
+            
             const data = await response.json();
             
             if (data.status === 'ok') {
                 const list = document.getElementById('items-list');
                 const row = document.createElement('div');
                 row.className = 'item-row';
-                row.innerHTML = `
-                    <div class="item-info">
-                        <span class="item-name">${data.name}</span>
-                        <span class="item-price">${data.price} смн</span>
-                    </div>
-                    <b>${data.price} смн</b>
-                `;
+                row.innerHTML = `<span>${data.name}</span><b>${data.price.toFixed(2)} смн</b>`;
                 list.prepend(row);
                 
                 let total = document.getElementById('total-sum');
-                total.innerText = (parseFloat(total.innerText) + data.price).toFixed(2);
-                document.getElementById('status').innerText = "✅ Илова шуд!";
+                let newTotal = (parseFloat(total.innerText) + data.price).toFixed(2);
+                total.innerText = newTotal;
+                status.innerText = "✅ Мол илова шуд";
             } else {
-                tg.showAlert("Хато: " + data.message);
+                status.innerHTML = `<span style="color:red;">❌ ${data.message}</span>`;
             }
         } catch (e) {
-            console.error(e);
+            status.innerHTML = `<span style="color:red;">❌ Хатои пайваст бо сервер!</span>`;
         } finally {
-            setTimeout(() => { isScanning = false; document.getElementById('status').innerText = "🔍 Тайёр барои мол"; }, 1500);
+            // Баъди 2 сония сканерро боз фаъол мекунем
+            setTimeout(() => { 
+                isScanning = false; 
+                if (mode !== 'add') status.innerText = "🔍 Тайёр барои мол"; 
+            }, 2000);
         }
     }
 
