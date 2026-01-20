@@ -3,142 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Сканери Савдо</title>
+    <title>Сканери Фурӯш</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; background: #f4f7f6; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; padding: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
         
-        /* Сканер 30% дар боло */
-        #reader { width: 100% !important; height: 30vh !important; background: #000; border-bottom: 2px solid #3498db; }
-        
-        /* Рӯйхати молҳо 70% дар поён */
-        #interface { 
-            height: 70vh; background: #fff; border-radius: 20px 20px 0 0; 
-            padding: 15px; display: flex; flex-direction: column; box-sizing: border-box;
-        }
-        
-        #content { flex-grow: 1; overflow-y: auto; }
-        
-        .item-row { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding: 12px; border-bottom: 1px solid #eee; background: #fff; margin-bottom: 5px; border-radius: 8px;
-        }
-        
-        .qty-ctrl { display: flex; align-items: center; gap: 15px; }
-        
-        .btn-qty { 
-            width: 32px; height: 32px; border-radius: 8px; border: none; 
-            color: #fff; font-size: 18px; cursor: pointer; font-weight: bold;
-        }
-        .btn-m { background: #e74c3c; } 
-        .btn-p { background: #2ecc71; }
-        
-        #checkout-btn { 
-            width: 100%; background: #3498db; color: white; border: none; 
-            padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold;
-            margin-top: 10px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        /* 30% Камера дар боло */
+        #scanner-container { position: relative; width: 100%; height: 30vh; background: #000; overflow: hidden; }
+        #reader { width: 100% !important; height: 100% !important; }
+
+        /* Чаҳорчӯбаи чоркунҷаи хурд дар байни камера */
+        .scanner-focus {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 150px; height: 100px; border: 2px solid #2ecc71; border-radius: 10px;
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5); z-index: 10; pointer-events: none;
         }
 
-        /* Сканери пурра барои Қабул */
-        .full-scanner #reader { height: 100vh !important; }
-        .full-scanner #interface { display: none; }
+        /* 70% Ҷойи холӣ барои молҳо */
+        #interface { height: 70vh; background: #fff; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; margin-top: -10px; z-index: 20; }
+        
+        #cart-list { flex-grow: 1; overflow-y: auto; }
+
+        .product-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; border-bottom: 1px solid #eee; margin-bottom: 8px;
+        }
+
+        .prod-info b { font-size: 18px; display: block; }
+        .prod-info span { color: #27ae60; font-weight: bold; }
+
+        .qty-controls { display: flex; align-items: center; gap: 15px; }
+        .btn-qty { width: 35px; height: 35px; border: none; border-radius: 8px; color: white; font-size: 20px; font-weight: bold; cursor: pointer; }
+        .minus { background: #e74c3c; }
+        .plus { background: #2ecc71; }
+
+        #btn-confirm {
+            width: 100%; background: #0088cc; color: white; border: none; padding: 15px;
+            border-radius: 12px; font-size: 18px; font-weight: bold; margin-top: 10px; display: none;
+        }
     </style>
 </head>
 <body>
-    <div id="reader"></div>
+
+    <div id="scanner-container">
+        <div id="reader"></div>
+        <div class="scanner-focus"></div> </div>
+
     <div id="interface">
-        <div id="content">
-            <p id="placeholder" style="text-align: center; color: #999; margin-top: 50px;">Маҳсулотро скан кунед...</p>
+        <div id="cart-list">
+            <p id="msg" style="text-align: center; color: #999; margin-top: 50px;">Молро ба чоркунҷаи боло нишон диҳед...</p>
         </div>
-        <button id="checkout-btn" onclick="sendOrder()">✅ ТАСДИҚИ ФУРӮШ</button>
+        <button id="btn-confirm" onclick="finishSale()">✅ ТАСДИҚИ ФУРӮШ</button>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('mode'); 
     
-    // !!! СУРОҒАИ СЕРВЕРИ ХУДРО ДАР ИНҶО НАВИСЕД !!!
+    // СУРОҒАИ СЕРВЕРРО ИНҶО НАВИСЕД
     const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
-
-    if (mode === 'receive') {
-        document.body.classList.add('full-scanner');
-    }
-
     let cart = {};
 
-    function onScanSuccess(code) {
-        if (mode === 'receive') {
-            tg.sendData(JSON.stringify({action: 'receive', code: code}));
-            tg.close();
-        } else {
-            fetchProduct(code);
-        }
-    }
-
-    async function fetchProduct(code) {
-        try {
-            const res = await fetch(`${SERVER_URL}/api/get_product`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({code: code})
-            });
-            const data = await res.json();
-            
+    function onScan(code) {
+        fetch(`${SERVER_URL}/api/get_product`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({code: code})
+        })
+        .then(r => r.json())
+        .then(data => {
             if(data.status === 'ok') {
-                if(!cart[code]) {
-                    cart[code] = {name: data.name, price: data.price, qty: 1};
-                } else {
-                    cart[code].qty++;
-                }
+                if(!cart[code]) cart[code] = {name: data.name, price: data.price, qty: 1};
+                else cart[code].qty++;
                 renderCart();
-            } else {
-                alert("Ин маҳсулот дар база нест!");
             }
-        } catch(e) {
-            alert("Хатогии пайвастшавӣ ба сервер!");
-        }
+        }).catch(err => console.error(err));
     }
 
     function renderCart() {
-        const cont = document.getElementById('content');
-        const btn = document.getElementById('checkout-btn');
-        cont.innerHTML = '';
-        
+        const list = document.getElementById('cart-list');
+        const btn = document.getElementById('btn-confirm');
+        list.innerHTML = '';
         const keys = Object.keys(cart);
+        
         if(keys.length > 0) {
             btn.style.display = 'block';
-            keys.forEach(code => {
-                const item = cart[code];
-                cont.innerHTML += `
-                    <div class="item-row">
-                        <div><b>${item.name}</b><br><span style="color:#27ae60">${item.price} смн</span></div>
-                        <div class="qty-ctrl">
-                            <button class="btn-qty btn-m" onclick="updateQty('${code}',-1)">-</button>
-                            <b>${item.qty}</b>
-                            <button class="btn-qty btn-p" onclick="updateQty('${code}',1)">+</button>
+            keys.forEach(c => {
+                const item = cart[c];
+                list.innerHTML += `
+                    <div class="product-item">
+                        <div class="prod-info">
+                            <b>${item.name}</b>
+                            <span>${item.price} смн</span>
+                        </div>
+                        <div class="qty-controls">
+                            <button class="btn-qty minus" onclick="updateQty('${c}', -1)">-</button>
+                            <b style="font-size: 20px;">${item.qty}</b>
+                            <button class="btn-qty plus" onclick="updateQty('${c}', 1)">+</button>
                         </div>
                     </div>`;
             });
         }
     }
 
-    function updateQty(code, d) {
-        cart[code].qty += d;
-        if(cart[code].qty <= 0) delete cart[code];
+    function updateQty(c, delta) {
+        cart[c].qty += delta;
+        if(cart[c].qty <= 0) delete cart[c];
         renderCart();
     }
 
-    function sendOrder() {
+    function finishSale() {
         tg.sendData(JSON.stringify({action: 'sale', items: cart}));
         tg.close();
     }
 
     const scanner = new Html5Qrcode("reader");
-    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: {width: 250, height: 150} }, onScanSuccess);
+    scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: {width: 150, height: 100} }, onScan);
 </script>
 </body>
 </html>
