@@ -3,25 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Системаи Сканнер</title>
+    <title>Сканери Мағоза</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; background: #f0f2f5; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Навигатсия */
-        .top-nav { display: flex; background: #1a1a1a; padding: 10px; gap: 10px; z-index: 1000; }
-        .mode-btn { flex: 1; padding: 15px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        .btn-sale { background: #27ae60; }
-        .btn-receive { background: #2980b9; }
-        .active-mode { border: 3px solid #fff; box-shadow: 0 0 10px rgba(255,255,255,0.4); }
+        /* Навигатсия дар боло */
+        .top-nav { display: flex; background: #1a1a1a; padding: 10px; gap: 8px; z-index: 1000; }
+        .mode-btn { flex: 1; padding: 14px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 13px; text-transform: uppercase; }
+        .btn-sale { background: #27ae60; border-bottom: 4px solid #1e8449; }
+        .btn-receive { background: #2980b9; border-bottom: 4px solid #1f618d; }
+        .active-mode { outline: 3px solid white; outline-offset: -2px; }
 
-        /* Сканнер */
-        #scanner-container { position: relative; background: #000; transition: all 0.3s ease; overflow: hidden; }
-        
-        /* Режими Фурӯш (Майда дар боло) */
-        .mode-sale #scanner-container { height: 30vh; }
-        /* Режими Қабул (Калон) */
+        /* Контейнери Сканер */
+        #scanner-container { position: relative; background: #000; transition: height 0.3s ease; overflow: hidden; }
+        .mode-sale #scanner-container { height: 35vh; border-bottom: 3px solid #27ae60; }
         .mode-receive #scanner-container { height: 100vh; position: absolute; width: 100%; top: 0; left: 0; z-index: 500; }
 
         #video { width: 100%; height: 100%; object-fit: cover; }
@@ -29,28 +26,29 @@
         /* Чоркунҷаи сканер */
         .scan-frame { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            border: 3px solid #00ff00; border-radius: 10px; z-index: 600;
-            box-shadow: 0 0 0 2000px rgba(0,0,0,0.5);
+            border: 3px solid #00ff00; border-radius: 12px; z-index: 600;
+            box-shadow: 0 0 0 2000px rgba(0,0,0,0.6);
         }
-        .mode-sale .scan-frame { width: 180px; height: 100px; }
-        .mode-receive .scan-frame { width: 250px; height: 150px; }
+        .mode-sale .scan-frame { width: 200px; height: 120px; }
+        .mode-receive .scan-frame { width: 260px; height: 160px; }
 
-        /* Интерфейси Фурӯш */
-        #interface-sale { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; z-index: 700; position: relative; }
+        /* Интерфейси Фурӯш (Рӯйхати молҳо) */
+        #interface-sale { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; z-index: 700; position: relative; margin-top: -10px; }
         .mode-receive #interface-sale { display: none; }
 
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
-        .item-info b { font-size: 16px; display: block; }
-        .item-info span { color: #27ae60; font-weight: bold; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid #eee; }
+        .item-info b { font-size: 16px; display: block; color: #333; }
+        .item-info span { color: #27ae60; font-weight: bold; font-size: 14px; }
 
-        .qty-controls { display: flex; align-items: center; gap: 15px; }
-        .qty-btn { width: 35px; height: 35px; border-radius: 50%; border: none; font-size: 20px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .qty-controls { display: flex; align-items: center; gap: 12px; }
+        .qty-btn { width: 36px; height: 36px; border-radius: 50%; border: none; font-size: 22px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .btn-minus { background: #e74c3c; }
         .btn-plus { background: #2ecc71; }
 
-        .total-box { margin-top: auto; padding: 15px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; border-top: 2px solid #eee; }
+        .total-box { margin-top: auto; padding: 15px 5px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; border-top: 3px solid #f0f2f5; color: #2c3e50; }
 
-        .btn-close-receive { position: absolute; top: 70px; right: 20px; z-index: 1100; background: #e74c3c; color: white; border: none; padding: 10px; border-radius: 5px; font-weight: bold; }
+        /* Тугмаи бозгашт дар ҳолати Қабул */
+        .btn-close-receive { position: absolute; top: 70px; right: 20px; z-index: 1100; background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body class="mode-sale" id="main-body">
@@ -61,23 +59,26 @@
 
 <div class="top-nav">
     <button id="btn-sale-nav" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
-    <button id="btn-receive-nav" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
+    <button id="btn-receive-nav" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛИ БОР</button>
 </div>
 
 <div id="scanner-container">
-    <button id="close-receive" class="btn-close-receive" style="display:none;" onclick="setMode('sale')">X ПУШИДАН</button>
+    <button id="close-receive" class="btn-close-receive" style="display:none;" onclick="setMode('sale')">← БАҚОФ</button>
     <video id="video" playsinline></video>
     <div class="scan-frame"></div>
 </div>
 
 <div id="interface-sale">
-    <div id="cart-list" style="flex-grow: 1; overflow-y: auto;">
-        <p style="text-align: center; color: #999;">Сабад холӣ аст. Скан кунед!</p>
+    <div id="cart-list" style="flex-grow: 1; overflow-y: auto; margin-bottom: 10px;">
+        <p style="text-align: center; color: #999; margin-top: 30px;">Рӯйхати молҳо холӣ аст.<br>Штрих-кодро сканер кунед!</p>
     </div>
+    
     <div class="total-box">
         <span>ҶАМЪ:</span>
         <span><span id="total-price">0.00</span> смн</span>
     </div>
+
+    <button onclick="Telegram.WebApp.close()" style="width: 100%; background: #333; color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; margin-top: 5px;">БАСТАНИ БАРНОМА</button>
 </div>
 
 <script>
@@ -85,24 +86,29 @@
     const beep = document.getElementById('beep-sound');
     let currentMode = 'sale';
     let cart = {};
-    let isScanning = false;
+    let isProcessing = false;
 
-    // Оғози камера
-    async function startCamera() {
+    // Инит камера
+    async function initCamera() {
         try {
             const devices = await codeReader.listVideoInputDevices();
-            const deviceId = devices[devices.length - 1].deviceId; // Камераи қафо
+            if (devices.length === 0) throw new Error("Камера ёфт нашуд");
+            
+            // Интихоби камераи қафо
+            const deviceId = devices[devices.length - 1].deviceId;
 
             codeReader.decodeFromVideoDevice(deviceId, 'video', (result, err) => {
-                if (result && !isScanning) {
-                    isScanning = true;
-                    beep.play();
+                if (result && !isProcessing) {
+                    isProcessing = true;
+                    beep.play().catch(e => console.log("Audio error"));
                     handleResult(result.text);
-                    setTimeout(() => { isScanning = false; }, 2000); // 2 сония пауза
+                    
+                    // Паузаи 2 сония то скани навбатӣ
+                    setTimeout(() => { isProcessing = false; }, 2000);
                 }
             });
         } catch (e) {
-            alert("Хатогии камера: " + e);
+            alert("Хатогии камера: " + e.message);
         }
     }
 
@@ -110,37 +116,47 @@
         currentMode = mode;
         const body = document.getElementById('main-body');
         const closeBtn = document.getElementById('close-receive');
-        
+        const btnSale = document.getElementById('btn-sale-nav');
+        const btnRec = document.getElementById('btn-receive-nav');
+
         if (mode === 'receive') {
             body.className = 'mode-receive';
             closeBtn.style.display = 'block';
+            btnRec.classList.add('active-mode');
+            btnSale.classList.remove('active-mode');
         } else {
             body.className = 'mode-sale';
             closeBtn.style.display = 'none';
+            btnSale.classList.add('active-mode');
+            btnRec.classList.remove('active-mode');
         }
     }
 
     function handleResult(barcode) {
         if (currentMode === 'sale') {
-            // Дар ҳолати фурӯш - илова ба сабад
             addToCart(barcode);
         } else {
-            // Дар ҳолати қабул - пурсидани маълумот
-            const name = prompt("Номи маҳсулотро ворид кунед:", "Маҳсулоти нав");
-            const price = prompt("Нархи харидро ворид кунед:", "0.00");
+            // Режими ҚАБУЛ - Пурсиш дар экран
+            const name = prompt("Номи маҳсулот барои штрих-коди " + barcode + ":");
+            if (!name) return;
+            const price = prompt("Нархи фурӯш (бо сомонӣ):", "0.00");
             const qty = prompt("Чанд адад қабул шуд?:", "1");
             
-            if(name && price && qty) {
-                alert(`Маҳсулот қабул шуд:\n${name}\n${qty} адад бо нархи ${price}`);
-                // Ин ҷо метавонед ба сервер фиристед (fetch)
+            if (name && price && qty) {
+                alert(`ҚАБУЛ ШУД:\nМол: ${name}\nМиқдор: ${qty}\nНарх: ${price} смн`);
+                // Дар оянда инҷо функсияи фиристодан ба серверро илова мекунем
             }
         }
     }
 
     function addToCart(barcode) {
-        // Имитацияи гирифтани маълумот (дар асл бояд аз сервер бошад)
+        // Барои тест агар маҳсулот дар база набошад
         if (!cart[barcode]) {
-            cart[barcode] = { name: "Маҳсулот " + barcode, price: 10.50, qty: 1 };
+            cart[barcode] = { 
+                name: "Моли " + barcode.substring(barcode.length - 4), 
+                price: 15.00, 
+                qty: 1 
+            };
         } else {
             cart[barcode].qty += 1;
         }
@@ -161,7 +177,12 @@
         list.innerHTML = '';
         let total = 0;
 
-        for (const code in cart) {
+        const items = Object.keys(cart);
+        if (items.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 30px;">Рӯйхати молҳо холӣ аст.</p>';
+        }
+
+        items.forEach(code => {
             const item = cart[code];
             total += item.price * item.qty;
             
@@ -174,16 +195,20 @@
                 </div>
                 <div class="qty-controls">
                     <button class="qty-btn btn-minus" onclick="changeQty('${code}', -1)">−</button>
-                    <span style="font-weight:bold; min-width:20px; text-align:center;">${item.qty}</span>
+                    <span style="font-weight:bold; min-width:25px; text-align:center;">${item.qty}</span>
                     <button class="qty-btn btn-plus" onclick="changeQty('${code}', 1)">+</button>
                 </div>
             `;
             list.appendChild(div);
-        }
+        });
         totalEl.innerText = total.toFixed(2);
     }
 
-    window.onload = startCamera;
+    window.onload = () => {
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        initCamera();
+    };
 </script>
 </body>
 </html>
