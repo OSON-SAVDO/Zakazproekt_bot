@@ -6,7 +6,7 @@ from threading import Thread
 from datetime import datetime
 
 TOKEN = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-hDE'
-SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/" # URL-и GitHub
+SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
@@ -17,12 +17,12 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Сохтани база
+# Инит кардани база
 with get_db() as conn:
     conn.execute('''CREATE TABLE IF NOT EXISTS products 
                     (code TEXT PRIMARY KEY, name TEXT, buy REAL, sell REAL, qty INTEGER)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS sales 
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sell_price REAL, profit REAL, date TEXT)''')
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, sell_price REAL, date TEXT)''')
 
 @app.route('/api/get_product', methods=['POST'])
 def get_product():
@@ -36,26 +36,25 @@ def get_product():
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row(
-        types.KeyboardButton("🛒 СКАНЕР (ФУРӮШ)", web_app=types.WebAppInfo(f"{SCANNER_URL}?mode=sale")),
-        types.KeyboardButton("📦 СКАНЕР (ҚАБУЛ)", web_app=types.WebAppInfo(f"{SCANNER_URL}?mode=receive"))
-    )
-    markup.row("📊 Ҳисобот", "📅 Моҳона")
-    markup.row("🏠 Склад", "🔙 Бозгашт")
-    bot.send_message(message.chat.id, "Интихоб кунед:", reply_markup=markup)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn_sale = types.KeyboardButton("🛒 СКАНЕР (ФУРӮШ)", web_app=types.WebAppInfo(f"{SCANNER_URL}?mode=sale"))
+    btn_receive = types.KeyboardButton("📦 СКАНЕР (ҚАБУЛ)", web_app=types.WebAppInfo(f"{SCANNER_URL}?mode=receive"))
+    markup.add(btn_sale, btn_receive)
+    markup.add("📊 Ҳисобот", "📅 Моҳона")
+    markup.add("🏠 Склад", "🔙 Бозгашт")
+    bot.send_message(message.chat.id, "Хуш омадед! Режимро интихоб кунед:", reply_markup=markup)
 
 @bot.message_handler(content_types=['web_app_data'])
 def handle_data(message):
-    data = json.loads(message.web_app_data.data)
+    raw_data = json.loads(message.web_app_data.data)
     
-    if data.get('action') == 'receive':
-        code = data['code']
-        msg = bot.send_message(message.chat.id, f"📦 Мол: `{code}`\nВорид кунед: `Ном, Нархи_харид, Нархи_фурӯш, Миқдор`", parse_mode="Markdown")
+    if raw_data.get('action') == 'receive':
+        code = raw_data['code']
+        msg = bot.send_message(message.chat.id, f"📦 Мол: `{code}`\nВорид кунед: `Ном, Харид, Фурӯш, Миқдор` (бо вергул)")
         bot.register_next_step_handler(msg, lambda m: save_product(m, code))
         
-    elif data.get('action') == 'sale':
-        items = data['items']
+    elif raw_data.get('action') == 'sale':
+        items = raw_data['items']
         total = 0
         with get_db() as conn:
             for code, info in items.items():
@@ -70,10 +69,11 @@ def save_product(message, code):
     try:
         name, buy, sell, qty = [i.strip() for i in message.text.split(',')]
         with get_db() as conn:
-            conn.execute("INSERT OR REPLACE INTO products VALUES (?,?,?,?,?)", (code, name, float(buy), float(sell), int(qty)))
+            conn.execute("INSERT OR REPLACE INTO products VALUES (?,?,?,?,?)", 
+                         (code, name, float(buy), float(sell), int(qty)))
         bot.send_message(message.chat.id, f"✅ Мол илова шуд: {name}")
     except:
-        bot.send_message(message.chat.id, "❌ Хато! Намуна: Оби ҷав, 5, 7, 100")
+        bot.send_message(message.chat.id, "❌ Хато! Намуна: Кола 1л, 5, 8, 50")
 
 def run(): app.run(host='0.0.0.0', port=8080)
 if __name__ == "__main__":
