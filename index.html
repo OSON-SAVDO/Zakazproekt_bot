@@ -5,77 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Сканери Мағоза</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         body { margin: 0; background: #121212; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
         
-        /* Меню дар боло (мисли акси шумо) */
+        /* Менюи боло */
         .top-nav { display: flex; background: #1a1a1a; padding: 15px; gap: 10px; z-index: 1000; }
         .mode-btn { 
             flex: 1; padding: 15px; border: none; border-radius: 12px; 
             color: white; font-weight: bold; font-size: 16px; 
             display: flex; align-items: center; justify-content: center; gap: 8px;
-            cursor: pointer; transition: 0.3s;
+            cursor: pointer; transition: 0.3s; opacity: 0.4;
         }
-        .btn-sale { background: #27ae60; } /* Сабз барои Фурӯш */
-        .btn-receive { background: #2980b9; } /* Кабуд барои Қабул */
-        
-        /* Эффекти интихоб */
-        .mode-btn { opacity: 0.4; transform: scale(0.95); }
+        .btn-sale { background: #27ae60; }
+        .btn-receive { background: #2980b9; }
         .active-mode { opacity: 1; transform: scale(1); border: 2px solid white; }
 
-        /* Сканнер */
-        #scanner-container { position: relative; background: #000; height: 30vh; overflow: hidden; border-bottom: 2px solid #333; }
-        .mode-receive #scanner-container { height: 40vh; } /* Барои қабул каме калонтар */
-        
-        #video { width: 100%; height: 100%; object-fit: cover; }
-        
-        .scan-frame { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            border: 2px solid #00ff00; width: 200px; height: 100px; border-radius: 10px;
-            box-shadow: 0 0 0 1000px rgba(0,0,0,0.6); z-index: 10;
+        /* Майдони сканер (Тугмаи калон) */
+        #scanner-area { 
+            height: 25vh; background: #000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; cursor: pointer;
+            border-bottom: 2px solid #333; position: relative;
         }
-
-        /* Рӯйхати молҳо дар поён */
-        #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
+        .scan-label { font-size: 14px; color: #00ff00; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px; }
         
+        /* Интерфейси рӯйхат */
+        #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
         #items-list { flex-grow: 1; overflow-y: auto; }
         
-        .item-row { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding: 12px; border-bottom: 1px solid #eee; 
-        }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
         .item-info b { font-size: 16px; color: #222; display: block; }
         .item-info span { color: #27ae60; font-weight: bold; }
 
         .qty-controls { display: flex; align-items: center; gap: 15px; }
-        .qty-btn { 
-            width: 32px; height: 32px; border-radius: 50%; border: none; 
-            font-size: 20px; color: white; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-        }
+        .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: none; font-size: 20px; color: white; display: flex; align-items: center; justify-content: center; }
         .btn-minus { background: #e74c3c; }
         .btn-plus { background: #2ecc71; }
 
-        .total-box { 
-            padding: 15px 5px; font-size: 20px; font-weight: bold; 
-            display: flex; justify-content: space-between; border-top: 2px solid #eee;
-            color: #1a1a1a;
-        }
+        .total-box { padding: 15px 5px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; border-top: 2px solid #eee; color: #1a1a1a; }
     </style>
 </head>
-<body class="mode-sale" id="main-body">
-
-<audio id="beep-sound" preload="auto"><source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg"></audio>
+<body class="mode-sale">
 
 <div class="top-nav">
     <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
     <button id="nav-receive" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
 </div>
 
-<div id="scanner-container">
-    <video id="video" playsinline autoplay></video>
-    <div class="scan-frame"></div>
+<div id="scanner-area" onclick="openScanner()">
+    <div style="font-size: 50px;">📷</div>
+    <div class="scan-label">Барои сканер кардан пахш кунед</div>
 </div>
 
 <div id="interface">
@@ -90,50 +68,42 @@
 </div>
 
 <script>
-    const codeReader = new ZXing.BrowserMultiFormatReader();
-    const beep = document.getElementById('beep-sound');
+    const tg = window.Telegram.WebApp;
+    tg.expand(); // Пурра кушодани тиреза
+
     let currentMode = 'sale';
     let cart = {};
-    let isProcessing = false;
-
-    async function initCamera() {
-        try {
-            const constraints = { video: { facingMode: "environment" } };
-            codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
-                if (result && !isProcessing) {
-                    isProcessing = true;
-                    beep.play().catch(() => {});
-                    handleScan(result.text);
-                    setTimeout(() => { isProcessing = false; }, 2000);
-                }
-            });
-        } catch (e) { alert("Камера кор намекунад"); }
-    }
 
     function setMode(mode) {
         currentMode = mode;
-        document.getElementById('main-body').className = 'mode-' + mode;
         document.getElementById('nav-sale').classList.toggle('active-mode', mode === 'sale');
         document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
     }
 
+    // Функсияи асосии сканер тавассути Telegram
+    function openScanner() {
+        tg.showScanQrPopup({
+            text: "Штрихкоди молро сканер кунед"
+        }, function(text) {
+            handleScan(text);
+            tg.closeScanQrPopup(); // Пӯшидани сканер пас аз ёфтани код
+            return true;
+        });
+    }
+
     function handleScan(barcode) {
+        if (!barcode) return;
+
         if (currentMode === 'sale') {
-            // Илова ба сабади фурӯш
             if (!cart[barcode]) {
-                cart[barcode] = { name: "Моли " + barcode.slice(-4), price: 12.00, qty: 1 };
+                cart[barcode] = { name: "Маҳсулот " + barcode.slice(-4), price: 10.00, qty: 1 };
             } else {
                 cart[barcode].qty += 1;
             }
             renderCart();
         } else {
-            // Равзана барои Қабули бор
-            const name = prompt("Номи мол:");
-            if (name) {
-                const qty = prompt("Миқдор:", "1");
-                const price = prompt("Нархи фурӯш:", "0.00");
-                alert(`Қабул шуд: ${name} (${qty} адад)`);
-            }
+            // Режими Қабул
+            tg.showAlert(`Моли нав сканер шуд: ${barcode}\nДар ин ҷо метавонед формаи иловакуниро созед.`);
         }
     }
 
@@ -177,12 +147,6 @@
         });
         document.getElementById('total-price').innerText = total.toFixed(2);
     }
-
-    window.onload = () => {
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
-        initCamera();
-    };
 </script>
 </body>
 </html>
