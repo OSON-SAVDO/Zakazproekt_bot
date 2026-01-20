@@ -7,16 +7,15 @@ from datetime import datetime
 
 # --- ТАНЗИМОТ ---
 TOKEN = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-hDE'
+# URL-и GitHub-и шумо
 SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 CORS(app)
 
-# --- БАЗАИ МАЪЛУМОТ ---
 def get_db():
-    conn = sqlite3.connect('shop.db', check_same_thread=False, timeout=10)
-    return conn
+    return sqlite3.connect('shop.db', check_same_thread=False, timeout=10)
 
 def init_db():
     conn = get_db()
@@ -28,64 +27,54 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- API БАРОИ СКАНЕР ---
-@app.route('/api/scan', methods=['POST'])
-def scan_api():
+# API барои сканери фурӯш
+@app.route('/api/get_product', methods=['POST'])
+def get_product():
     data = request.json
     code = data.get('code')
-    mode = data.get('mode') # 'sale' ё 'receive'
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, sell, buy FROM products WHERE code=?", (code,))
-    product = cursor.fetchone()
-    
-    if product:
-        name, sell, buy = product
-        if mode == 'sale':
-            cursor.execute("UPDATE products SET qty = qty - 1 WHERE code=?", (code,))
-            cursor.execute("INSERT INTO sales (name, sell_price, profit, date, code) VALUES (?,?,?,?,?)",
-                           (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d"), code))
-        else: # Режими қабул
-            cursor.execute("UPDATE products SET qty = qty + 1 WHERE code=?", (code,))
-        
-        conn.commit()
-        conn.close()
-        return jsonify({'status': 'ok', 'name': name, 'price': sell})
-    
-    conn.close()
-    return jsonify({'status': 'error', 'message': 'Мол дар база нест'})
+    conn = get_db(); cursor = conn.cursor()
+    cursor.execute("SELECT name, sell FROM products WHERE code=?", (code,))
+    res = cursor.fetchone(); conn.close()
+    if res:
+        return jsonify({'status': 'ok', 'name': res[0], 'price': res[1]})
+    return jsonify({'status': 'error', 'message': 'Мол ёфт нашуд'})
 
-# --- ФАРМОНҲОИ БОТ ---
+# --- МЕНЮИ БОТ ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn_scanner = types.KeyboardButton("📸 СКАНЕР (ФУРӮШ/ҚАБУЛ)", web_app=types.WebAppInfo(SCANNER_URL))
-    markup.add(btn_scanner)
-    markup.add(types.KeyboardButton("📊 Ҳисобот"), types.KeyboardButton("📅 Моҳона"))
-    markup.add(types.KeyboardButton("📦 Склад"), types.KeyboardButton("🔙 Бозгашт"))
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    # Ду тугмаи сканер дар боло
+    btn_sale = types.KeyboardButton("🛒 СКАНЕР (ФУРӮШ)", web_app=types.WebAppInfo(SCANNER_URL + "?mode=sale"))
+    btn_receive = types.KeyboardButton("📦 СКАНЕР (ҚАБУЛ)", web_app=types.WebAppInfo(SCANNER_URL + "?mode=receive"))
     
-    bot.send_message(message.chat.id, "Система омода. Сканнерро кушоед:", reply_markup=markup)
+    markup.add(btn_sale, btn_receive)
+    markup.add("📊 Ҳисобот", "📅 Моҳона")
+    markup.add("🏠 Склад", "🔙 Бозгашт")
+    
+    bot.send_message(message.chat.id, "Хуш омадед! Режимро интихоб кунед:", reply_markup=markup)
 
-@bot.message_handler(func=lambda m: m.text == "📊 Ҳисобот")
-def show_report(message):
-    today = datetime.now().strftime("%Y-%m-%d")
-    conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT SUM(sell_price), SUM(profit), COUNT(*) FROM sales WHERE date=?", (today,))
-    res = cursor.fetchone(); conn.close()
-    bot.send_message(message.chat.id, f"📊 ИМРӮЗ: {res[2]} фурӯш\n💵 Касса: {res[0] or 0} смн")
+# Логикаи Қабул (вақте ки аз Веб-апп маълумот меояд)
+@bot.message_handler(content_types=['web_app_data'])
+def web_app_handle(message):
+    # Агар аз сканери ҚАБУЛ штрих-код ояд
+    code = message.web_app_data.data
+    msg = bot.send_message(message.chat.id, f"📦 Мол скан шуд: `{code}`\n\nЛутфан маълумотро ворид кунед:\n`Ном, Нархи_харид, Нархи_фурӯш, Миқдор`", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, lambda m: process_add_product(m, code))
 
-@bot.message_handler(func=lambda m: m.text == "📦 Склад")
-def stock(message):
-    conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT name, qty FROM products"); rows = cursor.fetchall(); conn.close()
-    res = "📦 СКЛАД:\n" + "\n".join([f"{r[0]}: {r[1]} дона" for r in rows])
-    bot.send_message(message.chat.id, res if rows else "Склад холӣ аст")
+def process_add_product(message, code):
+    try:
+        parts = [i.strip() for i in message.text.split(',')]
+        name, buy, sell, qty = parts
+        conn = get_db(); cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO products VALUES (?,?,?,?,?)", (code, name, float(buy), float(sell), int(qty)))
+        conn.commit(); conn.close()
+        bot.send_message(message.chat.id, f"✅ Мол илова шуд: {name}")
+    except:
+        bot.send_message(message.chat.id, "❌ Хато дар формат! Мисол: Оби газнок, 2, 4, 50")
 
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
-
+# --- ИҶРОИ ФЛАСК ---
+def run(): app.run(host='0.0.0.0', port=8080)
 if __name__ == "__main__":
     init_db()
-    Thread(target=run_flask).start()
+    Thread(target=run).start()
     bot.polling(none_stop=True)
