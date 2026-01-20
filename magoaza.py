@@ -7,7 +7,6 @@ from datetime import datetime
 
 # --- ТАНЗИМОТ ---
 TOKEN = '8560757080:AAFXJLy71LZTPKMmCiscpe1mWKmj3lC-hDE'
-# Танҳо як URL-и асосӣ
 SCANNER_URL = "https://oson-savdo.github.io/Zakazproekt_bot/"
 
 bot = telebot.TeleBot(TOKEN)
@@ -16,7 +15,6 @@ CORS(app)
 
 # --- БАЗАИ МАЪЛУМОТ ---
 def get_db():
-    # Илова кардани timeout барои пешгирии "Locked Error"
     conn = sqlite3.connect('shop.db', check_same_thread=False, timeout=10)
     return conn
 
@@ -36,7 +34,7 @@ def scan_api():
     try:
         data = request.json
         code = data.get('code')
-        mode = data.get('mode') # Илова кардани режим (sale ё receive)
+        mode = data.get('mode')
         
         conn = get_db()
         cursor = conn.cursor()
@@ -57,7 +55,6 @@ def scan_api():
                     conn.close()
                     return jsonify({'status': 'error', 'message': 'Тамом шуд'})
             else:
-                # Агар режими қабул бошад, танҳо маълумоти молро бармегардонем
                 conn.close()
                 return jsonify({'status': 'ok', 'name': name, 'price': sell, 'qty': qty})
         
@@ -71,16 +68,41 @@ def scan_api():
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     
-    # Танҳо як тугмаи асосӣ барои Сканнер (ҳам фурӯш, ҳам қабул дар дохилаш)
+    # Тугмаи асосии WebApp
     btn_scanner = types.KeyboardButton("📸 СКАНЕР (ФУРӮШ/ҚАБУЛ)", web_app=types.WebAppInfo(SCANNER_URL))
     
+    # Илова кардани тугмаи Қабул дар назди Ҳисобот ва Склад
     markup.add(btn_scanner)
     markup.add("📊 Ҳисобот", "📅 Моҳона")
-    markup.add("📦 Склад", "🔙 Бозгашт")
+    markup.add("📦 Қабул", "🏠 Склад") # ТУГМАИ НАВ ДАР ИНҶО
+    markup.add("🔙 Бозгашт")
     
-    bot.send_message(message.chat.id, f"Салом {message.from_user.first_name}!\nСистема омода аст. Тугмаи Сканнерро пахш кунед:", reply_markup=markup)
+    bot.send_message(message.chat.id, f"Салом {message.from_user.first_name}!\nСистема омода аст. Интихоб кунед:", reply_markup=markup)
 
-# ҲИСОБОТҲО (Коди шумо дуруст буд, бетағйир мемонад)
+# --- ФУНКСИЯИ ҚАБУЛИ МОЛ ---
+@bot.message_handler(func=lambda m: m.text == "📦 Қабул")
+def receive_item(message):
+    msg = bot.send_message(message.chat.id, "Лутфан маълумоти молро барои илова кардан фиристед.\nФормат: `коди_мол, ном, нархи_харид, нархи_фурӯш, миқдор`", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, process_receive)
+
+def process_receive(message):
+    try:
+        # Намуна: 12345, Оби газнок, 2.5, 4, 10
+        data = [i.strip() for i in message.text.split(',')]
+        code, name, buy, sell, qty = data
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO products (code, name, buy, sell, qty) VALUES (?, ?, ?, ?, ?)",
+                       (code, name, float(buy), float(sell), int(qty)))
+        conn.commit()
+        conn.close()
+        
+        bot.send_message(message.chat.id, f"✅ Мол бо муваффақият қабул шуд:\n📦 Ном: {name}\n🔢 Миқдор: {qty} адад")
+    except Exception as e:
+        bot.send_message(message.chat.id, "❌ Хатогӣ дар формат! Боварӣ ҳосил кунед, ки маълумотро дуруст ворид кардед.\nНамуна: `12345678, Номи мол, 5, 8, 20`", parse_mode="Markdown")
+
+# ҲИСОБОТҲО
 @bot.message_handler(func=lambda m: m.text == "📊 Ҳисобот")
 def show_report(message):
     today = datetime.now().strftime("%Y-%m-%d")
@@ -101,14 +123,14 @@ def show_month_report(message):
     profit = res[1] if res[1] else 0
     bot.send_message(message.chat.id, f"📅 ДАР МОҲИ ҶОРӢ:\n🛍 Фурӯш: {res[2]} адад\n💵 Касса: {cash} смн\n💎 Фоида: {profit} смн")
 
-@bot.message_handler(func=lambda m: m.text == "📦 Склад")
+@bot.message_handler(func=lambda m: m.text == "🏠 Склад")
 def stock(message):
     conn = get_db(); cursor = conn.cursor()
     cursor.execute("SELECT name, qty, sell FROM products"); rows = cursor.fetchall(); conn.close()
     if not rows:
         bot.send_message(message.chat.id, "Склад холӣ аст.")
         return
-    res = "📦 ҲОЛАТИ СКЛАД:\n\n" + "\n".join([f"• {r[0]}: {r[1]} дона ({r[2]} смн)" for r in rows])
+    res = "🏠 ҲОЛАТИ СКЛАД:\n\n" + "\n".join([f"• {r[0]}: {r[1]} дона ({r[2]} смн)" for r in rows])
     bot.send_message(message.chat.id, res)
 
 @bot.message_handler(func=lambda m: m.text == "🔙 Бозгашт")
