@@ -3,68 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Сканери Мағоза</title>
+    <title>Сканери Оддӣ</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; background: #121212; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
-        
-        .top-nav { display: flex; background: #1a1a1a; padding: 15px; gap: 10px; z-index: 1000; }
-        .mode-btn { 
-            flex: 1; padding: 15px; border: none; border-radius: 12px; 
-            color: white; font-weight: bold; font-size: 16px; 
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            cursor: pointer; transition: 0.3s; opacity: 0.4;
+        body { 
+            margin: 0; 
+            background: #000; 
+            font-family: -apple-system, sans-serif; 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            color: white;
         }
-        .btn-sale { background: #27ae60; }
-        .btn-receive { background: #2980b9; }
-        .active-mode { opacity: 1; transform: scale(1); border: 2px solid white; }
 
-        /* Контейнери сканер */
+        /* Сканер дар боло */
         #reader { 
             width: 100% !important; 
-            height: 35vh !important; 
+            height: 40vh !important; /* Баландӣ каме кам карда шуд */
             background: #000;
         }
-        #reader__scan_region { background: #000; }
-        video { object-fit: cover !important; }
 
-        #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
-        #items-list { flex-grow: 1; overflow-y: auto; }
+        /* Қисми поён барои молҳо */
+        #interface { 
+            flex-grow: 1; 
+            background: #ffffff; 
+            color: #333; 
+            border-radius: 25px 25px 0 0; 
+            padding: 20px; 
+            overflow-y: auto;
+        }
+
+        .item-row { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 15px 0; 
+            border-bottom: 1px solid #eee; 
+        }
+
+        .item-info { flex: 1; }
+        .item-info b { font-size: 18px; color: #000; display: block; }
+        .item-info span { color: #27ae60; font-weight: bold; font-size: 16px; }
+
+        .qty-controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 20px; 
+        }
+
+        .qty-btn { 
+            width: 40px; 
+            height: 40px; 
+            border-radius: 12px; 
+            border: none; 
+            font-size: 24px; 
+            color: white; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            cursor: pointer;
+        }
+        .btn-minus { background: #ff4757; }
+        .btn-plus { background: #2ed573; }
         
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        .item-info b { font-size: 16px; color: #222; display: block; }
-        .item-info span { color: #27ae60; font-weight: bold; }
+        .qty-num { font-size: 20px; font-weight: bold; min-width: 25px; text-align: center; }
 
-        .qty-controls { display: flex; align-items: center; gap: 15px; }
-        .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: none; font-size: 20px; color: white; display: flex; align-items: center; justify-content: center; }
-        .btn-minus { background: #e74c3c; }
-        .btn-plus { background: #2ecc71; }
-
-        .total-box { padding: 15px 5px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; border-top: 2px solid #eee; color: #1a1a1a; }
+        /* Барои намуди зебо дар видео */
+        video { object-fit: cover !important; border-radius: 0 0 20px 20px; }
     </style>
 </head>
-<body class="mode-sale">
+<body>
 
 <audio id="beep-sound" preload="auto">
     <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
 </audio>
 
-<div class="top-nav">
-    <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
-    <button id="nav-receive" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
-</div>
-
 <div id="reader"></div>
 
 <div id="interface">
     <div id="items-list">
-        <p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>
-    </div>
-    
-    <div class="total-box">
-        <span>ҶАМЪ:</span>
-        <span><span id="total-price">0.00</span> смн</span>
+        <p style="text-align: center; color: #999; margin-top: 30px;">Молро сканер кунед...</p>
     </div>
 </div>
 
@@ -73,59 +92,50 @@
     tg.expand();
 
     const beep = document.getElementById('beep-sound');
-    let currentMode = 'sale';
     let cart = {};
     let lastResult = "";
     let lastTime = 0;
 
-    function setMode(mode) {
-        currentMode = mode;
-        document.getElementById('nav-sale').classList.toggle('active-mode', mode === 'sale');
-        document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
-    }
-
-    // Инитиализатсияи сканер
-    function onScanSuccess(decodedText, decodedResult) {
+    function onScanSuccess(decodedText) {
         const now = Date.now();
-        // Пешгирии сканеркунии такрорӣ дар 2 сония
         if (decodedText !== lastResult || (now - lastTime) > 2000) {
             lastResult = decodedText;
             lastTime = now;
-            
             beep.play().catch(() => {});
-            handleScan(decodedText);
+            addItem(decodedText);
         }
     }
 
-    function handleScan(barcode) {
-        if (currentMode === 'sale') {
-            if (!cart[barcode]) {
-                cart[barcode] = { name: "Мол: " + barcode, price: 15.00, qty: 1 };
-            } else {
-                cart[barcode].qty += 1;
-            }
-            renderCart();
+    function addItem(barcode) {
+        if (!cart[barcode]) {
+            // Маълумоти пешакӣ (баъдтар метавонед аз база гиред)
+            cart[barcode] = { name: "Мол " + barcode.slice(-4), price: 10.00, qty: 1 };
         } else {
-            alert("Қабули мол: " + barcode);
+            cart[barcode].qty += 1;
         }
+        render();
     }
 
     function updateQty(barcode, delta) {
         if (cart[barcode]) {
             cart[barcode].qty += delta;
             if (cart[barcode].qty <= 0) delete cart[barcode];
-            renderCart();
+            render();
         }
     }
 
-    function renderCart() {
+    function render() {
         const list = document.getElementById('items-list');
         list.innerHTML = '';
-        let total = 0;
         
-        Object.keys(cart).forEach(code => {
+        const keys = Object.keys(cart);
+        if (keys.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 30px;">Рӯйхат холӣ аст</p>';
+            return;
+        }
+
+        keys.forEach(code => {
             const item = cart[code];
-            total += item.price * item.qty;
             const div = document.createElement('div');
             div.className = 'item-row';
             div.innerHTML = `
@@ -135,26 +145,24 @@
                 </div>
                 <div class="qty-controls">
                     <button class="qty-btn btn-minus" onclick="updateQty('${code}', -1)">−</button>
-                    <b>${item.qty}</b>
+                    <span class="qty-num">${item.qty}</span>
                     <button class="qty-btn btn-plus" onclick="updateQty('${code}', 1)">+</button>
                 </div>
             `;
             list.appendChild(div);
         });
-        document.getElementById('total-price').innerText = total.toFixed(2);
     }
 
-    // Оғози камера
+    // Оғози сканер
     const html5QrCode = new Html5Qrcode("reader");
-    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-
-    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-    .catch(err => {
-        console.error("Камера ёфт нашуд", err);
-        // Агар камераи қафо ёфт нашавад, ҳамаи камераҳоро месанҷем
-        html5QrCode.start({ deviceId: { exact: undefined } }, config, onScanSuccess);
+    html5QrCode.start(
+        { facingMode: "environment" }, 
+        { fps: 10, qrbox: { width: 250, height: 150 } }, 
+        onScanSuccess
+    ).catch(err => {
+        // Агар хатогӣ шавад, кӯшиши дубора бо танзимоти оддӣ
+        html5QrCode.start({ deviceId: { exact: undefined } }, { fps: 10 }, onScanSuccess);
     });
-
 </script>
 </body>
 </html>
