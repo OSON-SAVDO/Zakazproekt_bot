@@ -9,10 +9,10 @@
     <style>
         body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* 30% Сканер */
+        /* 30% Сканер дар боло */
         #reader { width: 100% !important; height: 30vh !important; background: #000; }
         
-        /* 70% Интерфейс */
+        /* 70% Интерфейс дар поён */
         #interface { 
             height: 70vh; background: #fff; border-radius: 20px 20px 0 0; 
             padding: 15px; display: flex; flex-direction: column; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); 
@@ -49,7 +49,7 @@
     <div id="reader"></div>
     <div id="interface">
         <div id="content">
-            <p style="text-align: center; color: #999; margin-top: 40px;">Штрих-кодро скан кунед...</p>
+            <p id="placeholder" style="text-align: center; color: #999; margin-top: 40px;">Рӯйхати молҳои сканшуда дар инҷо пайдо мешавад...</p>
         </div>
         <button id="checkout-btn" onclick="sendOrder()">✅ ТАСДИҚИ ФУРӮШ</button>
     </div>
@@ -61,7 +61,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode'); 
     
-    // !!! ИНҶОРО ИВАЗ КУНЕД !!!
+    // !!! ИНҶОРО БО URL-И ХУД ИВАЗ КУНЕД !!!
     const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
 
     if (mode === 'receive') {
@@ -96,7 +96,7 @@
                 }
                 renderCart();
             } else {
-                alert("Мол ёфт нашуд!");
+                alert("Мол дар база ёфт нашуд!");
             }
         } catch(e) {
             alert("Хатои пайвастшавӣ ба сервер!");
