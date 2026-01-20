@@ -7,66 +7,82 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
-        body { margin: 0; background: #f0f2f5; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; background: #121212; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
         
-        .top-nav { display: flex; background: #1a1a1a; padding: 10px; gap: 8px; z-index: 1000; }
-        .mode-btn { flex: 1; padding: 14px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 13px; text-transform: uppercase; }
-        .btn-sale { background: #27ae60; border-bottom: 4px solid #1e8449; }
-        .btn-receive { background: #2980b9; border-bottom: 4px solid #1f618d; }
-        .active-mode { outline: 3px solid white; outline-offset: -2px; }
+        /* Меню дар боло (мисли акси шумо) */
+        .top-nav { display: flex; background: #1a1a1a; padding: 15px; gap: 10px; z-index: 1000; }
+        .mode-btn { 
+            flex: 1; padding: 15px; border: none; border-radius: 12px; 
+            color: white; font-weight: bold; font-size: 16px; 
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            cursor: pointer; transition: 0.3s;
+        }
+        .btn-sale { background: #27ae60; } /* Сабз барои Фурӯш */
+        .btn-receive { background: #2980b9; } /* Кабуд барои Қабул */
+        
+        /* Эффекти интихоб */
+        .mode-btn { opacity: 0.4; transform: scale(0.95); }
+        .active-mode { opacity: 1; transform: scale(1); border: 2px solid white; }
 
-        #scanner-container { position: relative; background: #000; transition: height 0.3s ease; overflow: hidden; flex-shrink: 0; }
-        .mode-sale #scanner-container { height: 35vh; border-bottom: 3px solid #27ae60; }
-        .mode-receive #scanner-container { height: 100vh; position: absolute; width: 100%; top: 0; left: 0; z-index: 500; }
-
+        /* Сканнер */
+        #scanner-container { position: relative; background: #000; height: 30vh; overflow: hidden; border-bottom: 2px solid #333; }
+        .mode-receive #scanner-container { height: 40vh; } /* Барои қабул каме калонтар */
+        
         #video { width: 100%; height: 100%; object-fit: cover; }
-
+        
         .scan-frame { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            border: 3px solid #00ff00; border-radius: 12px; z-index: 600;
-            box-shadow: 0 0 0 2000px rgba(0,0,0,0.6);
+            border: 2px solid #00ff00; width: 200px; height: 100px; border-radius: 10px;
+            box-shadow: 0 0 0 1000px rgba(0,0,0,0.6); z-index: 10;
         }
-        .mode-sale .scan-frame { width: 200px; height: 120px; }
-        .mode-receive .scan-frame { width: 260px; height: 160px; }
 
-        #interface-sale { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; z-index: 700; position: relative; margin-top: -10px; overflow: hidden; }
-        .mode-receive #interface-sale { display: none; }
-
-        #cart-list { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; }
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid #eee; }
-        .item-info b { font-size: 16px; display: block; color: #333; }
+        /* Рӯйхати молҳо дар поён */
+        #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
+        
+        #items-list { flex-grow: 1; overflow-y: auto; }
+        
+        .item-row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 12px; border-bottom: 1px solid #eee; 
+        }
+        .item-info b { font-size: 16px; color: #222; display: block; }
         .item-info span { color: #27ae60; font-weight: bold; }
 
-        .qty-controls { display: flex; align-items: center; gap: 12px; }
-        .qty-btn { width: 36px; height: 36px; border-radius: 50%; border: none; font-size: 22px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .qty-controls { display: flex; align-items: center; gap: 15px; }
+        .qty-btn { 
+            width: 32px; height: 32px; border-radius: 50%; border: none; 
+            font-size: 20px; color: white; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
         .btn-minus { background: #e74c3c; }
         .btn-plus { background: #2ecc71; }
 
-        .total-box { padding: 15px 5px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; border-top: 3px solid #f0f2f5; color: #2c3e50; }
-        .btn-close-receive { position: absolute; top: 70px; right: 20px; z-index: 1100; background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; }
+        .total-box { 
+            padding: 15px 5px; font-size: 20px; font-weight: bold; 
+            display: flex; justify-content: space-between; border-top: 2px solid #eee;
+            color: #1a1a1a;
+        }
     </style>
 </head>
 <body class="mode-sale" id="main-body">
 
-<audio id="beep-sound" preload="auto">
-    <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
-</audio>
+<audio id="beep-sound" preload="auto"><source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg"></audio>
 
 <div class="top-nav">
-    <button id="btn-sale-nav" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
-    <button id="btn-receive-nav" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
+    <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
+    <button id="nav-receive" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
 </div>
 
 <div id="scanner-container">
-    <button id="close-receive" class="btn-close-receive" style="display:none;" onclick="setMode('sale')">← БАҚОФ</button>
     <video id="video" playsinline autoplay></video>
     <div class="scan-frame"></div>
 </div>
 
-<div id="interface-sale">
-    <div id="cart-list">
-        <p style="text-align: center; color: #999; margin-top: 30px;">Рӯйхати молҳо холӣ аст.<br>Скан кунед!</p>
+<div id="interface">
+    <div id="items-list">
+        <p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>
     </div>
+    
     <div class="total-box">
         <span>ҶАМЪ:</span>
         <span><span id="total-price">0.00</span> смн</span>
@@ -82,73 +98,46 @@
 
     async function initCamera() {
         try {
-            // Танзимот барои танҳо камераи қафо
-            const constraints = {
-                video: { facingMode: "environment" }
-            };
-
-            // Оғози сканер
+            const constraints = { video: { facingMode: "environment" } };
             codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
                 if (result && !isProcessing) {
                     isProcessing = true;
                     beep.play().catch(() => {});
-                    handleResult(result.text);
+                    handleScan(result.text);
                     setTimeout(() => { isProcessing = false; }, 2000);
                 }
             });
-            console.log("Камера фаъол шуд");
-        } catch (e) {
-            console.error(e);
-            alert("Хатогӣ: Камера ёфт нашуд ё иҷозат дода нашудааст.");
-        }
+        } catch (e) { alert("Камера кор намекунад"); }
     }
 
     function setMode(mode) {
         currentMode = mode;
-        const body = document.getElementById('main-body');
-        const closeBtn = document.getElementById('close-receive');
-        const btnSale = document.getElementById('btn-sale-nav');
-        const btnRec = document.getElementById('btn-receive-nav');
-
-        if (mode === 'receive') {
-            body.className = 'mode-receive';
-            closeBtn.style.display = 'block';
-            btnRec.classList.add('active-mode');
-            btnSale.classList.remove('active-mode');
-        } else {
-            body.className = 'mode-sale';
-            closeBtn.style.display = 'none';
-            btnSale.classList.add('active-mode');
-            btnRec.classList.remove('active-mode');
-        }
+        document.getElementById('main-body').className = 'mode-' + mode;
+        document.getElementById('nav-sale').classList.toggle('active-mode', mode === 'sale');
+        document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
     }
 
-    function handleResult(barcode) {
+    function handleScan(barcode) {
         if (currentMode === 'sale') {
-            addToCart(barcode);
+            // Илова ба сабади фурӯш
+            if (!cart[barcode]) {
+                cart[barcode] = { name: "Моли " + barcode.slice(-4), price: 12.00, qty: 1 };
+            } else {
+                cart[barcode].qty += 1;
+            }
+            renderCart();
         } else {
-            // ҚАБУЛИ БОР
-            const name = prompt("Номи маҳсулот:");
-            if (!name) return;
-            const price = prompt("Нархи фурӯш:", "0.00");
-            const qty = prompt("Миқдор (адад):", "1");
-            
-            if (name && price && qty) {
-                alert(`Қабул шуд: ${name} - ${qty} адад`);
+            // Равзана барои Қабули бор
+            const name = prompt("Номи мол:");
+            if (name) {
+                const qty = prompt("Миқдор:", "1");
+                const price = prompt("Нархи фурӯш:", "0.00");
+                alert(`Қабул шуд: ${name} (${qty} адад)`);
             }
         }
     }
 
-    function addToCart(barcode) {
-        if (!cart[barcode]) {
-            cart[barcode] = { name: "Моли " + barcode.slice(-4), price: 15.0, qty: 1 };
-        } else {
-            cart[barcode].qty += 1;
-        }
-        renderCart();
-    }
-
-    function changeQty(barcode, delta) {
+    function updateQty(barcode, delta) {
         if (cart[barcode]) {
             cart[barcode].qty += delta;
             if (cart[barcode].qty <= 0) delete cart[barcode];
@@ -157,15 +146,14 @@
     }
 
     function renderCart() {
-        const list = document.getElementById('cart-list');
-        const totalEl = document.getElementById('total-price');
+        const list = document.getElementById('items-list');
         list.innerHTML = '';
         let total = 0;
-
+        
         const items = Object.keys(cart);
         if (items.length === 0) {
-            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 30px;">Рӯйхати молҳо холӣ аст.</p>';
-            totalEl.innerText = "0.00";
+            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>';
+            document.getElementById('total-price').innerText = "0.00";
             return;
         }
 
@@ -180,13 +168,14 @@
                     <span>${item.price.toFixed(2)} смн</span>
                 </div>
                 <div class="qty-controls">
-                    <button class="qty-btn btn-minus" onclick="changeQty('${code}', -1)">−</button>
-                    <span style="font-weight:bold; min-width:25px; text-align:center;">${item.qty}</span>
-                    <button class="qty-btn btn-plus" onclick="changeQty('${code}', 1)">+</button>
-                </div>`;
+                    <button class="qty-btn btn-minus" onclick="updateQty('${code}', -1)">−</button>
+                    <b>${item.qty}</b>
+                    <button class="qty-btn btn-plus" onclick="updateQty('${code}', 1)">+</button>
+                </div>
+            `;
             list.appendChild(div);
         });
-        totalEl.innerText = total.toFixed(2);
+        document.getElementById('total-price').innerText = total.toFixed(2);
     }
 
     window.onload = () => {
