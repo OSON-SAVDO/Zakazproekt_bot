@@ -29,132 +29,58 @@ def init_db():
     conn.close()
 
 # --- API БАРОИ СКАНЕР ---
-@app.route('/scan', methods=['POST'])
+@app.route('/api/scan', methods=['POST'])
 def scan_api():
-    try:
-        data = request.json
-        code = data.get('code')
-        mode = data.get('mode')
+    data = request.json
+    code = data.get('code')
+    mode = data.get('mode') # 'sale' ё 'receive'
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, sell, buy FROM products WHERE code=?", (code,))
+    product = cursor.fetchone()
+    
+    if product:
+        name, sell, buy = product
+        if mode == 'sale':
+            cursor.execute("UPDATE products SET qty = qty - 1 WHERE code=?", (code,))
+            cursor.execute("INSERT INTO sales (name, sell_price, profit, date, code) VALUES (?,?,?,?,?)",
+                           (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d"), code))
+        else: # Режими қабул
+            cursor.execute("UPDATE products SET qty = qty + 1 WHERE code=?", (code,))
         
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, buy, sell, qty FROM products WHERE code=?", (code,))
-        res = cursor.fetchone()
-        
-        if res:
-            name, buy, sell, qty = res
-            if mode == 'sale':
-                if qty > 0:
-                    cursor.execute("UPDATE products SET qty = qty - 1 WHERE code=?", (code,))
-                    cursor.execute("INSERT INTO sales (name, sell_price, profit, date, code) VALUES (?,?,?,?,?)",
-                                   (name, sell, sell-buy, datetime.now().strftime("%Y-%m-%d"), code))
-                    conn.commit()
-                    conn.close()
-                    return jsonify({'status': 'ok', 'name': name, 'price': sell})
-                else:
-                    conn.close()
-                    return jsonify({'status': 'error', 'message': 'Тамом шуд'})
-            else:
-                conn.close()
-                return jsonify({'status': 'ok', 'name': name, 'price': sell, 'qty': qty})
-        
+        conn.commit()
         conn.close()
-        return jsonify({'status': 'error', 'message': 'Мол ёфт нашуд'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return jsonify({'status': 'ok', 'name': name, 'price': sell})
+    
+    conn.close()
+    return jsonify({'status': 'error', 'message': 'Мол дар база нест'})
 
 # --- ФАРМОНҲОИ БОТ ---
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    
-    # Тугмаи асосии WebApp
     btn_scanner = types.KeyboardButton("📸 СКАНЕР (ФУРӮШ/ҚАБУЛ)", web_app=types.WebAppInfo(SCANNER_URL))
-    
-    # Илова кардани тугмаи Қабул дар назди Ҳисобот ва Склад
     markup.add(btn_scanner)
-    markup.add("📊 Ҳисобот", "📅 Моҳона")
-    markup.add("📦 Қабул", "🏠 Склад") # ТУГМАИ НАВ ДАР ИНҶО
-    markup.add("🔙 Бозгашт")
+    markup.add(types.KeyboardButton("📊 Ҳисобот"), types.KeyboardButton("📅 Моҳона"))
+    markup.add(types.KeyboardButton("📦 Склад"), types.KeyboardButton("🔙 Бозгашт"))
     
-    bot.send_message(message.chat.id, f"Салом {message.from_user.first_name}!\nСистема омода аст. Интихоб кунед:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Система омода. Сканнерро кушоед:", reply_markup=markup)
 
-# --- ФУНКСИЯИ ҚАБУЛИ МОЛ ---
-@bot.message_handler(func=lambda m: m.text == "📦 Қабул")
-def receive_item(message):
-    msg = bot.send_message(message.chat.id, "Лутфан маълумоти молро барои илова кардан фиристед.\nФормат: `коди_мол, ном, нархи_харид, нархи_фурӯш, миқдор`", parse_mode="Markdown")
-    bot.register_next_step_handler(msg, process_receive)
-
-def process_receive(message):
-    try:
-        # Намуна: 12345, Оби газнок, 2.5, 4, 10
-        data = [i.strip() for i in message.text.split(',')]
-        code, name, buy, sell, qty = data
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO products (code, name, buy, sell, qty) VALUES (?, ?, ?, ?, ?)",
-                       (code, name, float(buy), float(sell), int(qty)))
-        conn.commit()
-        conn.close()
-        
-        bot.send_message(message.chat.id, f"✅ Мол бо муваффақият қабул шуд:\n📦 Ном: {name}\n🔢 Миқдор: {qty} адад")
-    except Exception as e:
-        bot.send_message(message.chat.id, "❌ Хатогӣ дар формат! Боварӣ ҳосил кунед, ки маълумотро дуруст ворид кардед.\nНамуна: `12345678, Номи мол, 5, 8, 20`", parse_mode="Markdown")
-
-# ҲИСОБОТҲО
 @bot.message_handler(func=lambda m: m.text == "📊 Ҳисобот")
 def show_report(message):
     today = datetime.now().strftime("%Y-%m-%d")
     conn = get_db(); cursor = conn.cursor()
     cursor.execute("SELECT SUM(sell_price), SUM(profit), COUNT(*) FROM sales WHERE date=?", (today,))
     res = cursor.fetchone(); conn.close()
-    cash = res[0] if res[0] else 0
-    profit = res[1] if res[1] else 0
-    bot.send_message(message.chat.id, f"📊 ИМРӮЗ ({today}):\n🛍 Фурӯш: {res[2]} адад\n💵 Касса: {cash} смн\n💎 Фоида: {profit} смн")
+    bot.send_message(message.chat.id, f"📊 ИМРӮЗ: {res[2]} фурӯш\n💵 Касса: {res[0] or 0} смн")
 
-@bot.message_handler(func=lambda m: m.text == "📅 Моҳона")
-def show_month_report(message):
-    month = datetime.now().strftime("%Y-%m")
-    conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT SUM(sell_price), SUM(profit), COUNT(*) FROM sales WHERE date LIKE ?", (f"{month}%",))
-    res = cursor.fetchone(); conn.close()
-    cash = res[0] if res[0] else 0
-    profit = res[1] if res[1] else 0
-    bot.send_message(message.chat.id, f"📅 ДАР МОҲИ ҶОРӢ:\n🛍 Фурӯш: {res[2]} адад\n💵 Касса: {cash} смн\n💎 Фоида: {profit} смн")
-
-@bot.message_handler(func=lambda m: m.text == "🏠 Склад")
+@bot.message_handler(func=lambda m: m.text == "📦 Склад")
 def stock(message):
     conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT name, qty, sell FROM products"); rows = cursor.fetchall(); conn.close()
-    if not rows:
-        bot.send_message(message.chat.id, "Склад холӣ аст.")
-        return
-    res = "🏠 ҲОЛАТИ СКЛАД:\n\n" + "\n".join([f"• {r[0]}: {r[1]} дона ({r[2]} смн)" for r in rows])
-    bot.send_message(message.chat.id, res)
-
-@bot.message_handler(func=lambda m: m.text == "🔙 Бозгашт")
-def ask_return(message):
-    bot.send_message(message.chat.id, "Штрих-коди молро фиристед, то онро ба склад баргардонам:")
-    bot.register_next_step_handler(message, process_return)
-
-def process_return(message):
-    code = message.text
-    conn = get_db(); cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM sales WHERE code=? ORDER BY id DESC LIMIT 1", (code,))
-    res = cursor.fetchone()
-    if res:
-        cursor.execute("DELETE FROM sales WHERE id=?", (res[0],))
-        cursor.execute("UPDATE products SET qty = qty + 1 WHERE code=?", (code,))
-        conn.commit(); conn.close()
-        bot.send_message(message.chat.id, f"✅ Мол ба склад баргашт: {res[1]}")
-    else:
-        conn.close()
-        bot.send_message(message.chat.id, "❌ Чунин фурӯш ёфт нашуд.")
-
-# --- ЗАПУСК ---
-@app.route('/')
-def home(): return "Бот фаъол аст!"
+    cursor.execute("SELECT name, qty FROM products"); rows = cursor.fetchall(); conn.close()
+    res = "📦 СКЛАД:\n" + "\n".join([f"{r[0]}: {r[1]} дона" for r in rows])
+    bot.send_message(message.chat.id, res if rows else "Склад холӣ аст")
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
