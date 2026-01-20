@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Сканери Мағоза</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { margin: 0; background: #121212; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
         
-        /* Менюи боло */
         .top-nav { display: flex; background: #1a1a1a; padding: 15px; gap: 10px; z-index: 1000; }
         .mode-btn { 
             flex: 1; padding: 15px; border: none; border-radius: 12px; 
@@ -20,15 +20,15 @@
         .btn-receive { background: #2980b9; }
         .active-mode { opacity: 1; transform: scale(1); border: 2px solid white; }
 
-        /* Майдони сканер (Тугмаи калон) */
-        #scanner-area { 
-            height: 25vh; background: #000; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; cursor: pointer;
-            border-bottom: 2px solid #333; position: relative;
+        /* Контейнери сканер */
+        #reader { 
+            width: 100% !important; 
+            height: 35vh !important; 
+            background: #000;
         }
-        .scan-label { font-size: 14px; color: #00ff00; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Интерфейси рӯйхат */
+        #reader__scan_region { background: #000; }
+        video { object-fit: cover !important; }
+
         #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
         #items-list { flex-grow: 1; overflow-y: auto; }
         
@@ -46,15 +46,16 @@
 </head>
 <body class="mode-sale">
 
+<audio id="beep-sound" preload="auto">
+    <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
+</audio>
+
 <div class="top-nav">
     <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
     <button id="nav-receive" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
 </div>
 
-<div id="scanner-area" onclick="openScanner()">
-    <div style="font-size: 50px;">📷</div>
-    <div class="scan-label">Барои сканер кардан пахш кунед</div>
-</div>
+<div id="reader"></div>
 
 <div id="interface">
     <div id="items-list">
@@ -69,10 +70,13 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    tg.expand(); // Пурра кушодани тиреза
+    tg.expand();
 
+    const beep = document.getElementById('beep-sound');
     let currentMode = 'sale';
     let cart = {};
+    let lastResult = "";
+    let lastTime = 0;
 
     function setMode(mode) {
         currentMode = mode;
@@ -80,30 +84,29 @@
         document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
     }
 
-    // Функсияи асосии сканер тавассути Telegram
-    function openScanner() {
-        tg.showScanQrPopup({
-            text: "Штрихкоди молро сканер кунед"
-        }, function(text) {
-            handleScan(text);
-            tg.closeScanQrPopup(); // Пӯшидани сканер пас аз ёфтани код
-            return true;
-        });
+    // Инитиализатсияи сканер
+    function onScanSuccess(decodedText, decodedResult) {
+        const now = Date.now();
+        // Пешгирии сканеркунии такрорӣ дар 2 сония
+        if (decodedText !== lastResult || (now - lastTime) > 2000) {
+            lastResult = decodedText;
+            lastTime = now;
+            
+            beep.play().catch(() => {});
+            handleScan(decodedText);
+        }
     }
 
     function handleScan(barcode) {
-        if (!barcode) return;
-
         if (currentMode === 'sale') {
             if (!cart[barcode]) {
-                cart[barcode] = { name: "Маҳсулот " + barcode.slice(-4), price: 10.00, qty: 1 };
+                cart[barcode] = { name: "Мол: " + barcode, price: 15.00, qty: 1 };
             } else {
                 cart[barcode].qty += 1;
             }
             renderCart();
         } else {
-            // Режими Қабул
-            tg.showAlert(`Моли нав сканер шуд: ${barcode}\nДар ин ҷо метавонед формаи иловакуниро созед.`);
+            alert("Қабули мол: " + barcode);
         }
     }
 
@@ -120,14 +123,7 @@
         list.innerHTML = '';
         let total = 0;
         
-        const items = Object.keys(cart);
-        if (items.length === 0) {
-            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>';
-            document.getElementById('total-price').innerText = "0.00";
-            return;
-        }
-
-        items.forEach(code => {
+        Object.keys(cart).forEach(code => {
             const item = cart[code];
             total += item.price * item.qty;
             const div = document.createElement('div');
@@ -147,6 +143,18 @@
         });
         document.getElementById('total-price').innerText = total.toFixed(2);
     }
+
+    // Оғози камера
+    const html5QrCode = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+    .catch(err => {
+        console.error("Камера ёфт нашуд", err);
+        // Агар камераи қафо ёфт нашавад, ҳамаи камераҳоро месанҷем
+        html5QrCode.start({ deviceId: { exact: undefined } }, config, onScanSuccess);
+    });
+
 </script>
 </body>
 </html>
