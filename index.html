@@ -3,74 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Сканер</title>
+    <title>Сканери Савдо</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; background: #000; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        #reader { width: 100% !important; height: 30vh !important; background: #000; }
-        #interface { flex-grow: 1; background: #fff; border-radius: 20px 20px 0 0; padding: 15px; overflow-y: auto; }
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
-        .qty-ctrl { display: flex; align-items: center; gap: 10px; }
-        .btn { width: 35px; height: 35px; border-radius: 8px; border: none; color: #fff; font-size: 20px; }
-        .btn-m { background: #e74c3c; } .btn-p { background: #2ecc71; }
+        body { margin: 0; background: #f4f7f6; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Сканер 30% экран */
+        #reader { width: 100% !important; height: 30vh !important; background: #000; border-bottom: 3px solid #3498db; }
+        
+        /* Интерфейс 70% экран */
+        #interface { height: 70vh; display: flex; flex-direction: column; background: white; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 15px; box-sizing: border-box; }
+        
+        .list-container { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; background: #fff; margin-bottom: 5px; border-radius: 8px; }
+        
+        .qty-ctrl { display: flex; align-items: center; gap: 15px; }
+        .btn-qty { width: 32px; height: 32px; border-radius: 50%; border: none; color: white; font-weight: bold; font-size: 18px; cursor: pointer; }
+        .btn-minus { background: #e74c3c; }
+        .btn-plus { background: #2ecc71; }
+        
+        #checkout-btn { width: 100%; background: #3498db; color: white; border: none; padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .empty-msg { text-align: center; color: #95a5a6; margin-top: 50px; }
     </style>
 </head>
 <body>
     <div id="reader"></div>
-    <div id="interface" id="list">
-        <div id="content"></div>
+    <div id="interface">
+        <div id="list" class="list-container">
+            <div id="content" class="empty-msg">Штрих-кодро скан кунед...</div>
+        </div>
+        <button id="checkout-btn" onclick="sendToBot()">✅ ТАСДИҚИ ФУРӮШ</button>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
+    tg.expand();
+    
     const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('mode'); // 'sale' ё 'receive'
+    const mode = urlParams.get('mode'); 
     let cart = {};
+
+    // Иваз кунед ба URL-и сервери худ!
+    const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
+
+    // Агар режим "Қабул" бошад, баландии сканерро 100% мекунем
+    if (mode === 'receive') {
+        document.getElementById('reader').style.height = '100vh';
+        document.getElementById('interface').style.display = 'none';
+    }
 
     function onScanSuccess(code) {
         if (mode === 'receive') {
-            // Агар режим ҚАБУЛ бошад, танҳо кодро ба бот мефиристем
-            tg.sendData(code);
+            tg.sendData(JSON.stringify({action: 'receive', code: code}));
             tg.close();
         } else {
-            // Агар ФУРӮШ бошад, дар экран нишон медиҳем
             fetchProduct(code);
         }
     }
 
     async function fetchProduct(code) {
-        // ДАР ИНҶО URL-И РЕНДЕРИ ХУДРО МОНЕД
-        const RENDER_URL = "https://zakazproekt-bot-2.onrender.com";
         try {
-            const res = await fetch(`${RENDER_URL}/api/get_product`, {
+            const res = await fetch(`${SERVER_URL}/api/get_product`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({code: code})
             });
             const data = await res.json();
             if(data.status === 'ok') {
-                if(!cart[code]) cart[code] = {name: data.name, price: data.price, qty: 1};
-                else cart[code].qty++;
+                if(!cart[code]) {
+                    cart[code] = {name: data.name, price: data.price, qty: 1};
+                } else {
+                    cart[code].qty++;
+                }
                 renderCart();
+            } else {
+                alert("Мол дар база нест!");
             }
-        } catch(e) { alert("Хатогии пайвастшавӣ"); }
+        } catch(e) { alert("Хатогии пайвастшавӣ!"); }
     }
 
     function renderCart() {
         const cont = document.getElementById('content');
+        const btn = document.getElementById('checkout-btn');
         cont.innerHTML = '';
-        Object.keys(cart).forEach(code => {
-            const item = cart[code];
-            cont.innerHTML += `<div class="item-row">
-                <div><b>${item.name}</b><br>${item.price} смн</div>
-                <div class="qty-ctrl">
-                    <button class="btn btn-m" onclick="updateQty('${code}',-1)">-</button>
-                    <b>${item.qty}</b>
-                    <button class="btn btn-p" onclick="updateQty('${code}',1)">+</button>
-                </div>
-            </div>`;
-        });
+        const keys = Object.keys(cart);
+        
+        if(keys.length > 0) {
+            btn.style.display = 'block';
+            keys.forEach(code => {
+                const item = cart[code];
+                cont.innerHTML += `
+                    <div class="item-row">
+                        <div><b>${item.name}</b><br><span style="color:#27ae60">${item.price} смн</span></div>
+                        <div class="qty-ctrl">
+                            <button class="btn-qty btn-minus" onclick="updateQty('${code}',-1)">-</button>
+                            <b>${item.qty}</b>
+                            <button class="btn-qty btn-plus" onclick="updateQty('${code}',1)">+</button>
+                        </div>
+                    </div>`;
+            });
+        }
     }
 
     function updateQty(code, d) {
@@ -79,8 +113,13 @@
         renderCart();
     }
 
+    function sendToBot() {
+        tg.sendData(JSON.stringify({action: 'sale', items: cart}));
+        tg.close();
+    }
+
     const scanner = new Html5Qrcode("reader");
-    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, onScanSuccess);
+    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: {width: 250, height: 150} }, onScanSuccess);
 </script>
 </body>
 </html>
