@@ -7,17 +7,13 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; background: #000; font-family: -apple-system, sans-serif; height: 100vh; overflow: hidden; color: white; }
+        body { margin: 0; background: #000; font-family: sans-serif; height: 100vh; overflow: hidden; color: white; }
         #reader { position: fixed; top: 0; left: 0; width: 100% !important; height: 100% !important; z-index: 1; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2; pointer-events: none; }
-        .scan-box { width: 250px; height: 250px; border: 3px solid #2ecc71; border-radius: 20px; position: relative; box-shadow: 0 0 20px rgba(46, 204, 113, 0.5); }
-        .scan-line { position: absolute; width: 100%; height: 2px; background: #2ecc71; top: 0; animation: scanAnim 2s infinite linear; }
-        @keyframes scanAnim { 0% { top: 0; } 100% { top: 100%; } }
-        .controls { position: fixed; top: 20px; width: 100%; display: flex; justify-content: space-around; z-index: 3; }
-        .mode-btn { padding: 12px 25px; border-radius: 25px; border: none; font-weight: bold; color: white; cursor: pointer; transition: 0.3s; }
-        .active { transform: scale(1.1); box-shadow: 0 0 15px rgba(255,255,255,0.5); border: 2px solid white; }
-        #cart-preview { position: fixed; bottom: 0; width: 100%; background: rgba(255,255,255,0.95); color: #333; border-radius: 20px 20px 0 0; padding: 15px; max-height: 40%; overflow-y: auto; z-index: 4; display: none; box-sizing: border-box; }
-        .item-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; }
+        .scan-box { width: 260px; height: 260px; border: 4px solid #2ecc71; border-radius: 30px; position: relative; }
+        .controls { position: fixed; top: 15px; width: 100%; display: flex; justify-content: center; gap: 10px; z-index: 3; }
+        .mode-btn { padding: 12px 20px; border-radius: 15px; border: none; font-weight: bold; color: white; cursor: pointer; opacity: 0.6; }
+        .active { opacity: 1; border: 2px solid white; transform: scale(1.05); }
     </style>
 </head>
 <body>
@@ -25,85 +21,64 @@
 <audio id="beep" src="https://www.soundjay.com/button/beep-07.mp3" preload="auto"></audio>
 
 <div class="controls">
-    <button id="btn-sale" class="mode-btn active" style="background: #27ae60;" onclick="setMode('sale')">🛒 ФУРӮШ</button>
-    <button id="btn-receive" class="mode-btn" style="background: #2980b9;" onclick="setMode('receive')">📦 ҚАБУЛ</button>
+    <button id="btn-sale" class="mode-btn" style="background: #27ae60;" onclick="setMode('sale')">🛒 ФУРӮШ</button>
+    <button id="btn-receive" class="mode-btn active" style="background: #2980b9;" onclick="setMode('receive')">📦 ҚАБУЛ</button>
 </div>
 
 <div id="reader"></div>
-
-<div class="overlay">
-    <div class="scan-box"><div class="scan-line"></div></div>
-    <p id="status-text" style="margin-top: 20px; font-weight: bold; text-shadow: 1px 1px 2px black;">Камераро ба код наздик кунед</p>
-</div>
-
-<div id="cart-preview">
-    <div id="items-list"></div>
-    <div style="margin-top: 10px; font-size: 18px; font-weight: bold; text-align: right;">ҶАМЪ: <span id="total-val">0</span> смн</div>
-</div>
+<div class="overlay"><div class="scan-box"></div><p>Кодро дар дохили чоркунҷа гиред</p></div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    let currentMode = 'sale';
+    let currentMode = 'receive'; // Режими аввалия "Қабул"
     let cart = {};
-    const beep = document.getElementById('beep');
 
     function setMode(mode) {
         currentMode = mode;
         document.getElementById('btn-sale').classList.toggle('active', mode === 'sale');
         document.getElementById('btn-receive').classList.toggle('active', mode === 'receive');
-        updateUI();
+        if (mode === 'sale' && Object.keys(cart).length > 0) tg.MainButton.show();
+        else tg.MainButton.hide();
     }
 
     function onScanSuccess(decodedText) {
-        beep.play().catch(() => {});
+        document.getElementById('beep').play().catch(() => {});
         
         if (currentMode === 'receive') {
-            // Дар режими қабул фавран ба бот мефиристем
-            tg.sendData(JSON.stringify({action: 'receive', code: decodedText}));
+            // МУҲИМ: Маълумотро дар шакли JSON мефиристем
+            const data = {
+                action: 'receive',
+                code: decodedText
+            };
+            tg.sendData(JSON.stringify(data)); 
+            // Пас аз sendData Телеграм худаш Web App-ро мепӯшад
         } else {
-            // Дар режими фурӯш ба сабад илова мекунем
+            // Режими фурӯш
             if (!cart[decodedText]) {
                 cart[decodedText] = { name: "Мол " + decodedText.substring(0,4), price: 10, qty: 1 };
             } else {
                 cart[decodedText].qty++;
             }
-            updateUI();
-        }
-    }
-
-    function updateUI() {
-        const list = document.getElementById('items-list');
-        const preview = document.getElementById('cart-preview');
-        list.innerHTML = '';
-        let total = 0;
-        let count = 0;
-
-        for (let id in cart) {
-            let item = cart[id];
-            total += item.price * item.qty;
-            count++;
-            list.innerHTML += `<div class="item-row"><span>${item.name} (x${item.qty})</span><span>${item.price * item.qty} смн</span></div>`;
-        }
-
-        if (currentMode === 'sale' && count > 0) {
-            preview.style.display = 'block';
-            document.getElementById('total-val').innerText = total.toFixed(2);
-            tg.MainButton.setText(`ТАСДИҚИ ФУРӮШ (${total.toFixed(2)} смн)`);
+            tg.MainButton.setText("ТАСДИҚИ ФУРӮШ");
             tg.MainButton.show();
-        } else {
-            preview.style.display = 'none';
-            tg.MainButton.hide();
         }
     }
 
     tg.MainButton.onClick(() => {
-        tg.sendData(JSON.stringify({action: 'sale', items: cart}));
+        if (currentMode === 'sale') {
+            tg.sendData(JSON.stringify({action: 'sale', items: cart}));
+        }
     });
 
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, onScanSuccess);
+    const scanner = new Html5Qrcode("reader");
+    const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+    
+    scanner.start({ facingMode: "environment" }, config, onScanSuccess)
+    .catch(err => {
+        alert("Хатогии камера: " + err);
+    });
 </script>
 </body>
 </html>
