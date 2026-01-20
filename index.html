@@ -3,35 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Сканери Оддӣ</title>
+    <title>Сканери Дӯкон</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { 
             margin: 0; 
-            background: #000; 
+            background: #f4f4f7; 
             font-family: -apple-system, sans-serif; 
             height: 100vh; 
             display: flex; 
             flex-direction: column; 
-            color: white;
+            overflow: hidden;
+            color: #333;
         }
 
-        /* Сканер дар боло */
+        /* Менюи боло */
+        .header {
+            background: #ffffff;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .btn-receive {
+            background: #2980b9;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* Сканер хурд - 30% экран */
         #reader { 
             width: 100% !important; 
-            height: 40vh !important; /* Баландӣ каме кам карда шуд */
+            height: 30vh !important; 
             background: #000;
         }
+        
+        video { object-fit: cover !important; }
 
-        /* Қисми поён барои молҳо */
+        /* Рӯйхати молҳо - 70% экран */
         #interface { 
-            flex-grow: 1; 
+            height: 70vh;
             background: #ffffff; 
-            color: #333; 
-            border-radius: 25px 25px 0 0; 
-            padding: 20px; 
-            overflow-y: auto;
+            display: flex; 
+            flex-direction: column;
+        }
+
+        #items-list { 
+            flex-grow: 1; 
+            overflow-y: auto; 
+            padding: 5px 15px;
         }
 
         .item-row { 
@@ -42,35 +69,25 @@
             border-bottom: 1px solid #eee; 
         }
 
-        .item-info { flex: 1; }
-        .item-info b { font-size: 18px; color: #000; display: block; }
-        .item-info span { color: #27ae60; font-weight: bold; font-size: 16px; }
+        .item-info b { font-size: 17px; color: #1a1a1a; display: block; }
+        .item-info span { color: #27ae60; font-weight: bold; font-size: 15px; }
 
-        .qty-controls { 
-            display: flex; 
-            align-items: center; 
-            gap: 20px; 
-        }
+        .qty-controls { display: flex; align-items: center; gap: 12px; }
 
         .qty-btn { 
-            width: 40px; 
-            height: 40px; 
-            border-radius: 12px; 
-            border: none; 
-            font-size: 24px; 
-            color: white; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            cursor: pointer;
+            width: 42px; height: 42px; border-radius: 10px; border: none; 
+            font-size: 24px; color: white; display: flex; 
+            align-items: center; justify-content: center; cursor: pointer;
+            transition: active 0.1s;
         }
-        .btn-minus { background: #ff4757; }
-        .btn-plus { background: #2ed573; }
+        .qty-btn:active { opacity: 0.7; transform: scale(0.9); }
         
-        .qty-num { font-size: 20px; font-weight: bold; min-width: 25px; text-align: center; }
+        .btn-minus { background: #e74c3c; }
+        .btn-plus { background: #2ecc71; }
+        
+        .qty-num { font-size: 20px; font-weight: bold; min-width: 30px; text-align: center; }
 
-        /* Барои намуди зебо дар видео */
-        video { object-fit: cover !important; border-radius: 0 0 20px 20px; }
+        .empty-msg { text-align: center; color: #999; margin-top: 50px; font-size: 16px; }
     </style>
 </head>
 <body>
@@ -79,11 +96,16 @@
     <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
 </audio>
 
+<div class="header">
+    <b style="font-size: 18px;">🛒 Сабад</b>
+    <button class="btn-receive" onclick="receiveStock()">📦 ҚАБУЛИ БОР</button>
+</div>
+
 <div id="reader"></div>
 
 <div id="interface">
     <div id="items-list">
-        <p style="text-align: center; color: #999; margin-top: 30px;">Молро сканер кунед...</p>
+        <p class="empty-msg">Рӯйхат холӣ аст.<br>Молро сканер кунед...</p>
     </div>
 </div>
 
@@ -98,6 +120,7 @@
 
     function onScanSuccess(decodedText) {
         const now = Date.now();
+        // Нагузоред, ки як мол пайиҳам тез сканер шавад (интизории 2 сония)
         if (decodedText !== lastResult || (now - lastTime) > 2000) {
             lastResult = decodedText;
             lastTime = now;
@@ -108,8 +131,8 @@
 
     function addItem(barcode) {
         if (!cart[barcode]) {
-            // Маълумоти пешакӣ (баъдтар метавонед аз база гиред)
-            cart[barcode] = { name: "Мол " + barcode.slice(-4), price: 10.00, qty: 1 };
+            // Номи мол ва нархро дар инҷо ислоҳ кардан мумкин аст
+            cart[barcode] = { name: "Маҳсулоти " + barcode.slice(-4), price: 12.50, qty: 1 };
         } else {
             cart[barcode].qty += 1;
         }
@@ -119,9 +142,15 @@
     function updateQty(barcode, delta) {
         if (cart[barcode]) {
             cart[barcode].qty += delta;
-            if (cart[barcode].qty <= 0) delete cart[barcode];
+            if (cart[barcode].qty <= 0) {
+                delete cart[barcode];
+            }
             render();
         }
+    }
+
+    function receiveStock() {
+        tg.showConfirm("Шумо мехоҳед ба режими қабули бор гузаред?");
     }
 
     function render() {
@@ -130,7 +159,7 @@
         
         const keys = Object.keys(cart);
         if (keys.length === 0) {
-            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 30px;">Рӯйхат холӣ аст</p>';
+            list.innerHTML = '<p class="empty-msg">Рӯйхат холӣ аст.<br>Молро сканер кунед...</p>';
             return;
         }
 
@@ -153,15 +182,20 @@
         });
     }
 
-    // Оғози сканер
+    // Танзими сканери хурд
     const html5QrCode = new Html5Qrcode("reader");
+    const config = { 
+        fps: 15, 
+        qrbox: { width: 200, height: 100 }, // Майдони фокус хурдтар барои сканери хурд
+        aspectRatio: 1.0 
+    };
+
     html5QrCode.start(
         { facingMode: "environment" }, 
-        { fps: 10, qrbox: { width: 250, height: 150 } }, 
+        config, 
         onScanSuccess
     ).catch(err => {
-        // Агар хатогӣ шавад, кӯшиши дубора бо танзимоти оддӣ
-        html5QrCode.start({ deviceId: { exact: undefined } }, { fps: 10 }, onScanSuccess);
+        html5QrCode.start({ deviceId: { exact: undefined } }, config, onScanSuccess);
     });
 </script>
 </body>
