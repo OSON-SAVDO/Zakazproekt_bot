@@ -3,70 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Сканери Мағоза</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <script src="https://unpkg.com/@zxing/library@0.19.1"></script>
     <style>
-        body { margin: 0; background: #f0f2f5; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Менюи интихоб дар боло */
-        .top-nav { display: flex; background: #222; padding: 5px; gap: 5px; z-index: 200; }
-        .mode-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; font-size: 12px; }
-        .btn-sale { background: #27ae60; }
-        .btn-receive { background: #2980b9; }
-        .active-mode { border: 2px solid white; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        /* Менюи интихоб */
+        .top-nav { display: flex; background: #222; padding: 10px; gap: 8px; z-index: 200; }
+        .mode-btn { flex: 1; padding: 14px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 13px; text-transform: uppercase; transition: 0.3s; }
+        .btn-sale { background: #27ae60; opacity: 0.6; }
+        .btn-receive { background: #2980b9; opacity: 0.6; }
+        .active-mode { opacity: 1; border: 2px solid white; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
 
-        /* Контейнери умумии Сканнер */
-        #scanner-wrapper { position: relative; transition: all 0.3s ease; background: #000; overflow: hidden; }
-        
-        /* Сканнери ФУРӮШ (хурд) */
-        .mode-sale #scanner-wrapper { height: 35%; border-bottom: 3px solid #27ae60; }
-        
-        /* Сканнери ҚАБУЛ (Калон, тамоми экран) */
+        /* Контейнери Сканнер */
+        #scanner-wrapper { position: relative; background: #000; overflow: hidden; min-height: 250px; }
+        .mode-sale #scanner-wrapper { height: 35vh; border-bottom: 4px solid #27ae60; }
         .mode-receive #scanner-wrapper { height: 100vh; position: absolute; top: 0; left: 0; width: 100%; z-index: 150; }
-        .mode-receive #interface { display: none; } /* Дар ҳолати қабул интерфейси поёнро пинҳон мекунем */
+        .mode-receive #interface { display: none; }
 
         #video { width: 100%; height: 100%; object-fit: cover; }
 
         /* Чоркунҷаи сканер */
         .scan-frame { 
-            width: 220px; height: 130px; border: 3px solid #00ff00; 
+            width: 250px; height: 150px; border: 3px solid #00ff00; 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            border-radius: 15px; z-index: 160; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; 
+            border-radius: 15px; z-index: 160; 
+            box-shadow: 0 0 0 4000px rgba(0,0,0,0.6); pointer-events: none; 
+        }
+        .scan-line {
+            position: absolute; width: 100%; height: 2px; background: rgba(0, 255, 0, 0.5);
+            top: 0; left: 0; animation: scanAnim 2s infinite linear;
+        }
+        @keyframes scanAnim {
+            0% { top: 0; } 100% { top: 100%; }
         }
 
-        /* Интерфейси поён барои Фурӯш */
-        #interface { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; margin-top: -15px; z-index: 10; position: relative; }
+        /* Интерфейси поён */
+        #interface { flex-grow: 1; background: white; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; margin-top: -20px; z-index: 10; position: relative; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); }
         
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        .qty-controls { display: flex; align-items: center; gap: 12px; }
-        .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: #e1e4e8; font-size: 20px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-        .btn-plus { background: #2ecc71; color: white; }
-        .btn-minus { background: #e74c3c; color: white; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee; }
+        .item-info b { font-size: 16px; color: #333; }
+        .qty-controls { display: flex; align-items: center; gap: 15px; }
+        .qty-btn { width: 35px; height: 35px; border-radius: 50%; border: none; font-size: 20px; font-weight: bold; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; }
+        .btn-plus { background: #2ecc71; }
+        .btn-minus { background: #e74c3c; }
 
-        .total-box { font-size: 22px; font-weight: bold; border-top: 3px solid #222; padding-top: 10px; display: flex; justify-content: space-between; margin-top: auto; }
+        .total-box { font-size: 24px; font-weight: bold; border-top: 2px solid #eee; padding: 15px 5px; display: flex; justify-content: space-between; margin-top: auto; color: #2c3e50; }
         
-        .btn-back { position: absolute; top: 20px; right: 20px; z-index: 210; background: rgba(255,0,0,0.8); color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: bold; }
+        .btn-back { position: absolute; top: 70px; right: 20px; z-index: 210; background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .hidden { display: none; }
     </style>
 </head>
 <body class="mode-sale" id="main-body">
 
-<audio id="beep-success" preload="auto"><source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg"></audio>
+<audio id="beep-success" preload="auto">
+    <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
+</audio>
 
 <div class="top-nav">
     <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="changeMode('sale')">🛒 ФУРӮШ</button>
-    <button id="nav-receive" class="mode-btn btn-receive" onclick="changeMode('receive')">📦 ҚАБУЛИ БОР</button>
+    <button id="nav-receive" class="mode-btn btn-receive" onclick="changeMode('receive')">📦 ҚАБУЛ</button>
 </div>
 
 <div id="scanner-wrapper">
     <button id="back-to-sale" class="btn-back hidden" onclick="changeMode('sale')">← БАҚОФ</button>
-    <video id="video" playsinline muted autoplay></video>
-    <div class="scan-frame"></div>
+    <video id="video" playsinline autoplay></video>
+    <div class="scan-frame">
+        <div class="scan-line"></div>
+    </div>
 </div>
 
 <div id="interface">
-    <div id="items-list" style="flex-grow: 1; overflow-y: auto; margin-bottom: 10px;">
-        <div style="text-align: center; color: #999; margin-top: 20px;">Рӯйхати молҳо холӣ аст</div>
+    <div id="items-list" style="flex-grow: 1; overflow-y: auto;">
+        <div style="text-align: center; color: #999; margin-top: 40px;">Рӯйхати молҳо холӣ аст</div>
     </div>
     
     <div class="total-box">
@@ -80,18 +90,35 @@
     const sSuccess = document.getElementById('beep-success');
     let currentMode = 'sale';
     let cart = {};
+    let isProcessing = false; // Барои пешгирии сканери пай дар пай
 
     async function initCamera() {
         try {
-            const devices = await codeReader.listVideoInputDevices();
-            const deviceId = devices[devices.length - 1].deviceId;
-            codeReader.decodeFromVideoDevice(deviceId, 'video', (result, err) => {
-                if (result) {
-                    sSuccess.play();
+            // Танзимоти камера барои телефон
+            const constraints = {
+                video: { 
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+
+            // Оғози хондан аз камера
+            codeReader.decodeFromConstraints(constraints, 'video', (result, err) => {
+                if (result && !isProcessing) {
+                    isProcessing = true;
+                    sSuccess.play().catch(() => {}); // Овоз
                     handleScan(result.text);
+                    
+                    // Таваққуфи 2 сония пеш аз скани навбатӣ
+                    setTimeout(() => { isProcessing = false; }, 2000);
                 }
             });
-        } catch (e) { console.error(e); }
+            console.log("Сканер фаъол шуд");
+        } catch (e) {
+            console.error("Хатогии камера:", e);
+            alert("Камера ёфт нашуд ё иҷозат дода нашудааст");
+        }
     }
 
     function changeMode(mode) {
@@ -102,12 +129,12 @@
         const navReceive = document.getElementById('nav-receive');
 
         if (mode === 'receive') {
-            body.className = 'mode-receive';
+            body.classList.replace('mode-sale', 'mode-receive');
             backBtn.classList.remove('hidden');
             navReceive.classList.add('active-mode');
             navSale.classList.remove('active-mode');
         } else {
-            body.className = 'mode-sale';
+            body.classList.replace('mode-receive', 'mode-sale');
             backBtn.classList.add('hidden');
             navSale.classList.add('active-mode');
             navReceive.classList.remove('active-mode');
@@ -115,27 +142,32 @@
     }
 
     async function handleScan(barcode) {
-        // ИН ҶО БА СЕРВЕР ПАЙВАСТ МЕШАВЕМ
         try {
             const response = await fetch(`https://zakazproekt-bot-2.onrender.com/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: barcode, mode: currentMode })
             });
+            
+            if (!response.ok) throw new Error("Server error");
             const data = await response.json();
 
             if (data.status === 'ok') {
                 if (currentMode === 'sale') {
-                    addItemToCart({ id: barcode, name: data.name, price: data.price });
+                    addItemToCart({ id: barcode, name: data.name, price: parseFloat(data.price) });
                 } else {
-                    // Барои ҚАБУЛ метавонӣ танҳо паём нишон диҳӣ ё амали дигар кунӣ
                     Telegram.WebApp.showAlert(`Моли "${data.name}" қабул шуд!`);
                 }
+            } else {
+                Telegram.WebApp.showAlert("Мол ёфт нашуд!");
             }
         } catch (e) {
-            // Намуна барои санҷиш агар сервер кор накунад:
+            console.log("Режими санҷишӣ: ", barcode);
+            // Агар сервер кор накунад, барои тест илова мекунем:
             if (currentMode === 'sale') {
-                addItemToCart({ id: barcode, name: "Моли " + barcode, price: 10 });
+                addItemToCart({ id: barcode, name: "Маҳсулоти " + barcode, price: 10.00 });
+            } else {
+                Telegram.WebApp.showConfirm(`Қабули мол: ${barcode}`);
             }
         }
     }
@@ -162,33 +194,41 @@
         list.innerHTML = "";
         let total = 0;
 
-        for (const id in cart) {
+        const cartKeys = Object.keys(cart);
+        if (cartKeys.length === 0) {
+            list.innerHTML = '<div style="text-align: center; color: #999; margin-top: 40px;">Рӯйхати молҳо холӣ аст</div>';
+            document.getElementById('total-sum').innerText = "0.00";
+            return;
+        }
+
+        cartKeys.forEach(id => {
             const item = cart[id];
-            const itemTotal = item.price * item.qty;
-            total += itemTotal;
+            total += item.price * item.qty;
 
             const row = document.createElement('div');
             row.className = 'item-row';
             row.innerHTML = `
-                <div>
+                <div class="item-info">
                     <div><b>${item.name}</b></div>
-                    <div style="font-size: 13px; color: #2ecc71;">${item.price.toFixed(2)} смн</div>
+                    <div style="color: #27ae60; font-weight: bold;">${item.price.toFixed(2)} смн</div>
                 </div>
                 <div class="qty-controls">
                     <button class="qty-btn btn-minus" onclick="updateQty('${id}', -1)">−</button>
-                    <span style="min-width: 20px; text-align: center; font-weight: bold;">${item.qty}</span>
+                    <span style="min-width: 25px; text-align: center; font-size: 18px;">${item.qty}</span>
                     <button class="qty-btn btn-plus" onclick="updateQty('${id}', 1)">+</button>
                 </div>
             `;
             list.appendChild(row);
-        }
+        });
         document.getElementById('total-sum').innerText = total.toFixed(2);
-        if (Object.keys(cart).length === 0) {
-            list.innerHTML = '<div style="text-align: center; color: #999; margin-top: 20px;">Рӯйхати молҳо холӣ аст</div>';
-        }
     }
 
-    window.onload = initCamera;
+    // Оғози кор ҳангоми боршавӣ
+    window.addEventListener('load', () => {
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        initCamera();
+    });
 </script>
 </body>
 </html>
