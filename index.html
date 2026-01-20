@@ -3,123 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Сканери Фурӯш</title>
+    <title>Сканери Тезкор</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; padding: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        body { margin: 0; background: #121212; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
         
-        /* 30% Камера дар боло */
-        #scanner-container { position: relative; width: 100%; height: 30vh; background: #000; overflow: hidden; }
-        #reader { width: 100% !important; height: 100% !important; }
-
-        /* Чаҳорчӯбаи чоркунҷаи хурд дар байни камера */
-        .scanner-focus {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 150px; height: 100px; border: 2px solid #2ecc71; border-radius: 10px;
-            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5); z-index: 10; pointer-events: none;
+        .top-nav { display: flex; background: #1a1a1a; padding: 10px; gap: 10px; }
+        .mode-btn { 
+            flex: 1; padding: 12px; border: none; border-radius: 10px; 
+            color: white; font-weight: bold; font-size: 14px; 
+            cursor: pointer; transition: 0.2s; opacity: 0.5;
         }
+        .btn-sale { background: #27ae60; }
+        .btn-receive { background: #2980b9; }
+        .active-mode { opacity: 1; border: 2px solid white; }
 
-        /* 70% Ҷойи холӣ барои молҳо */
-        #interface { height: 70vh; background: #fff; padding: 15px; display: flex; flex-direction: column; border-radius: 20px 20px 0 0; margin-top: -10px; z-index: 20; }
+        #reader { width: 100% !important; background: #000; height: 300px !important; }
         
-        #cart-list { flex-grow: 1; overflow-y: auto; }
-
-        .product-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 12px; border-bottom: 1px solid #eee; margin-bottom: 8px;
-        }
-
-        .prod-info b { font-size: 18px; display: block; }
-        .prod-info span { color: #27ae60; font-weight: bold; }
-
-        .qty-controls { display: flex; align-items: center; gap: 15px; }
-        .btn-qty { width: 35px; height: 35px; border: none; border-radius: 8px; color: white; font-size: 20px; font-weight: bold; cursor: pointer; }
-        .minus { background: #e74c3c; }
-        .plus { background: #2ecc71; }
-
-        #btn-confirm {
-            width: 100%; background: #0088cc; color: white; border: none; padding: 15px;
-            border-radius: 12px; font-size: 18px; font-weight: bold; margin-top: 10px; display: none;
-        }
+        #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
+        #items-list { flex-grow: 1; overflow-y: auto; }
+        
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .qty-controls { display: flex; align-items: center; gap: 10px; }
+        .qty-btn { width: 30px; height: 30px; border-radius: 50%; border: none; color: white; font-weight: bold; }
+        
+        .total-box { padding: 15px; font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; border-top: 2px solid #eee; }
     </style>
 </head>
 <body>
 
-    <div id="scanner-container">
-        <div id="reader"></div>
-        <div class="scanner-focus"></div> </div>
+<audio id="beep-sound" preload="auto">
+    <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
+</audio>
 
-    <div id="interface">
-        <div id="cart-list">
-            <p id="msg" style="text-align: center; color: #999; margin-top: 50px;">Молро ба чоркунҷаи боло нишон диҳед...</p>
-        </div>
-        <button id="btn-confirm" onclick="finishSale()">✅ ТАСДИҚИ ФУРӮШ</button>
+<div class="top-nav">
+    <button id="nav-sale" class="mode-btn btn-sale active-mode" onclick="setMode('sale')">🛒 ФУРӮШ</button>
+    <button id="nav-receive" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
+</div>
+
+<div id="reader"></div>
+
+<div id="interface">
+    <div id="items-list">
+        <p style="text-align: center; color: #999;">Рӯйхат холӣ аст</p>
     </div>
+    <div class="total-box">
+        <span>ҶАМЪ:</span>
+        <span><span id="total-price">0.00</span> смн</span>
+    </div>
+</div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-    
-    // СУРОҒАИ СЕРВЕРРО ИНҶО НАВИСЕД
-    const SERVER_URL = "https://zakazproekt-bot-2.onrender.com"; 
-    let cart = {};
 
-    function onScan(code) {
-        fetch(`${SERVER_URL}/api/get_product`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code: code})
-        })
-        .then(r => r.json())
-        .then(data => {
-            if(data.status === 'ok') {
-                if(!cart[code]) cart[code] = {name: data.name, price: data.price, qty: 1};
-                else cart[code].qty++;
-                renderCart();
-            }
-        }).catch(err => console.error(err));
+    const beep = document.getElementById('beep-sound');
+    let currentMode = 'sale';
+    let cart = {};
+    let lastResult = "";
+    let lastTime = 0;
+
+    function setMode(mode) {
+        currentMode = mode;
+        document.getElementById('nav-sale').classList.toggle('active-mode', mode === 'sale');
+        document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
     }
 
-    function renderCart() {
-        const list = document.getElementById('cart-list');
-        const btn = document.getElementById('btn-confirm');
-        list.innerHTML = '';
-        const keys = Object.keys(cart);
-        
-        if(keys.length > 0) {
-            btn.style.display = 'block';
-            keys.forEach(c => {
-                const item = cart[c];
-                list.innerHTML += `
-                    <div class="product-item">
-                        <div class="prod-info">
-                            <b>${item.name}</b>
-                            <span>${item.price} смн</span>
-                        </div>
-                        <div class="qty-controls">
-                            <button class="btn-qty minus" onclick="updateQty('${c}', -1)">-</button>
-                            <b style="font-size: 20px;">${item.qty}</b>
-                            <button class="btn-qty plus" onclick="updateQty('${c}', 1)">+</button>
-                        </div>
-                    </div>`;
-            });
+    function onScanSuccess(decodedText) {
+        const now = Date.now();
+        // Суръати сканерро зиёд кардем: фосила танҳо 500 миллисония (0.5 сония)
+        if (decodedText !== lastResult || (now - lastTime) > 500) {
+            lastResult = decodedText;
+            lastTime = now;
+            beep.play().catch(() => {});
+            handleScan(decodedText);
         }
     }
 
-    function updateQty(c, delta) {
-        cart[c].qty += delta;
-        if(cart[c].qty <= 0) delete cart[c];
-        renderCart();
+    function handleScan(barcode) {
+        if (currentMode === 'sale') {
+            if (!cart[barcode]) {
+                cart[barcode] = { name: "Мол: " + barcode, price: 15.00, qty: 1 };
+            } else {
+                cart[barcode].qty += 1;
+            }
+            renderCart();
+        } else {
+            // Режими Қабул
+            alert("Маълумот барои қабул: " + barcode);
+        }
     }
 
-    function finishSale() {
-        tg.sendData(JSON.stringify({action: 'sale', items: cart}));
-        tg.close();
+    function updateQty(barcode, delta) {
+        if (cart[barcode]) {
+            cart[barcode].qty += delta;
+            if (cart[barcode].qty <= 0) delete cart[barcode];
+            renderCart();
+        }
     }
 
-    const scanner = new Html5Qrcode("reader");
-    scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: {width: 150, height: 100} }, onScan);
+    function renderCart() {
+        const list = document.getElementById('items-list');
+        list.innerHTML = '';
+        let total = 0;
+        Object.keys(cart).forEach(code => {
+            const item = cart[code];
+            total += item.price * item.qty;
+            const div = document.createElement('div');
+            div.className = 'item-row';
+            div.innerHTML = `
+                <div><b>${item.name}</b><br><small>${item.price} смн</small></div>
+                <div class="qty-controls">
+                    <button class="qty-btn" style="background:#e74c3c" onclick="updateQty('${code}', -1)">-</button>
+                    <span>${item.qty}</span>
+                    <button class="qty-btn" style="background:#2ecc71" onclick="updateQty('${code}', 1)">+</button>
+                </div>`;
+            list.appendChild(div);
+        });
+        document.getElementById('total-price').innerText = total.toFixed(2);
+    }
+
+    // Танзимоти СКАНИ ТЕЗ
+    const html5QrCode = new Html5Qrcode("reader");
+    const config = { 
+        fps: 20,          // Суръати кадрҳо зиёд шуд
+        qrbox: { width: 250, height: 150 },
+        aspectRatio: 1.0
+    };
+
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+    .catch(err => {
+        // Агар камераи автоматӣ кор накунад
+        html5QrCode.start({ deviceId: { exact: undefined } }, config, onScanSuccess);
+    });
 </script>
 </body>
 </html>
