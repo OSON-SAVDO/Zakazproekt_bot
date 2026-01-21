@@ -7,78 +7,159 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; background: #000; font-family: sans-serif; height: 100vh; overflow: hidden; color: white; }
-        #reader { position: fixed; top: 0; left: 0; width: 100% !important; height: 100% !important; z-index: 1; }
-        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2; pointer-events: none; }
-        .scan-box { width: 260px; height: 260px; border: 4px solid #2ecc71; border-radius: 30px; position: relative; }
-        .controls { position: fixed; top: 15px; width: 100%; display: flex; justify-content: center; gap: 10px; z-index: 3; }
-        .mode-btn { padding: 12px 20px; border-radius: 15px; border: none; font-weight: bold; color: white; cursor: pointer; opacity: 0.6; }
-        .active { opacity: 1; border: 2px solid white; transform: scale(1.05); }
+        body { margin: 0; background: #f4f4f9; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; color: #333; }
+        
+        /* Камера дар қисми боло (30%) */
+        .scanner-container { position: relative; height: 30vh; background: #000; overflow: hidden; }
+        #reader { width: 100% !important; height: 100% !important; }
+        
+        /* Тугмаҳои режим */
+        .nav-header { 
+            position: absolute; top: 10px; width: 100%; z-index: 10;
+            display: flex; justify-content: center; gap: 10px;
+        }
+        .mode-btn { 
+            padding: 8px 15px; border-radius: 20px; border: none; 
+            font-weight: bold; color: white; cursor: pointer; opacity: 0.8; font-size: 12px;
+        }
+        .active { opacity: 1; border: 2px solid white; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+
+        /* Қисми рӯйхати молҳо (70%) */
+        .cart-container { 
+            flex: 1; display: flex; flex-direction: column; 
+            background: white; border-top-left-radius: 20px; border-top-right-radius: 20px;
+            margin-top: -15px; z-index: 5; padding: 20px; overflow: hidden;
+        }
+        .cart-header { font-size: 18px; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; }
+        
+        #items-list { flex: 1; overflow-y: auto; }
+        
+        .item-row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 12px 0; border-bottom: 1px solid #eee; 
+        }
+        .item-info { flex: 1; }
+        .item-name { font-weight: 600; font-size: 15px; }
+        .item-price { color: #888; font-size: 13px; }
+        
+        .qty-controls { display: flex; align-items: center; gap: 12px; }
+        .qty-btn { 
+            width: 30px; height: 30px; border-radius: 8px; border: none; 
+            color: white; font-size: 18px; font-weight: bold; cursor: pointer;
+        }
+        .btn-minus { background: #e74c3c; }
+        .btn-plus { background: #2ecc71; }
+        .qty-num { font-weight: bold; min-width: 20px; text-align: center; }
+
+        .empty-msg { text-align: center; color: #aaa; margin-top: 40px; }
     </style>
 </head>
 <body>
 
 <audio id="beep" src="https://www.soundjay.com/button/beep-07.mp3" preload="auto"></audio>
 
-<div class="controls">
-    <button id="btn-sale" class="mode-btn" style="background: #27ae60;" onclick="setMode('sale')">🛒 ФУРӮШ</button>
-    <button id="btn-receive" class="mode-btn active" style="background: #2980b9;" onclick="setMode('receive')">📦 ҚАБУЛ</button>
+<div class="scanner-container">
+    <div class="nav-header">
+        <button id="btn-sale" class="mode-btn active" style="background: #27ae60;" onclick="setMode('sale')">🛒 ФУРӮШ</button>
+        <button id="btn-receive" class="mode-btn" style="background: #2980b9;" onclick="setMode('receive')">📦 ҚАБУЛ</button>
+    </div>
+    <div id="reader"></div>
 </div>
 
-<div id="reader"></div>
-<div class="overlay"><div class="scan-box"></div><p>Кодро дар дохили чоркунҷа гиред</p></div>
+<div class="cart-container">
+    <div class="cart-header">
+        <span>Рӯйхати молҳо</span>
+        <span style="color: #27ae60;"><span id="total-val">0.00</span> смн</span>
+    </div>
+    
+    <div id="items-list">
+        <div class="empty-msg">Ҳанӯз моле скан нашудааст</div>
+    </div>
+</div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    let currentMode = 'receive'; // Режими аввалия "Қабул"
+    let currentMode = 'sale'; // Бо фурӯш оғоз мекунем
     let cart = {};
+    const beep = document.getElementById('beep');
 
     function setMode(mode) {
         currentMode = mode;
         document.getElementById('btn-sale').classList.toggle('active', mode === 'sale');
         document.getElementById('btn-receive').classList.toggle('active', mode === 'receive');
-        if (mode === 'sale' && Object.keys(cart).length > 0) tg.MainButton.show();
-        else tg.MainButton.hide();
+        updateUI();
     }
 
     function onScanSuccess(decodedText) {
-        document.getElementById('beep').play().catch(() => {});
+        beep.play().catch(() => {});
         
         if (currentMode === 'receive') {
-            // МУҲИМ: Маълумотро дар шакли JSON мефиристем
-            const data = {
-                action: 'receive',
-                code: decodedText
-            };
-            tg.sendData(JSON.stringify(data)); 
-            // Пас аз sendData Телеграм худаш Web App-ро мепӯшад
+            tg.sendData(JSON.stringify({action: 'receive', code: decodedText}));
         } else {
-            // Режими фурӯш
             if (!cart[decodedText]) {
-                cart[decodedText] = { name: "Мол " + decodedText.substring(0,4), price: 10, qty: 1 };
+                // Дар оянда метавонӣ аз база номи аслиро гирӣ
+                cart[decodedText] = { name: "Мол: " + decodedText.substring(0,6), price: 15.00, qty: 1 };
             } else {
                 cart[decodedText].qty++;
             }
-            tg.MainButton.setText("ТАСДИҚИ ФУРӮШ");
+            updateUI();
+        }
+    }
+
+    function updateQty(code, delta) {
+        if (cart[code]) {
+            cart[code].qty += delta;
+            if (cart[code].qty <= 0) delete cart[code];
+            updateUI();
+        }
+    }
+
+    function updateUI() {
+        const list = document.getElementById('items-list');
+        list.innerHTML = '';
+        let total = 0;
+        let hasItems = false;
+
+        for (let code in cart) {
+            hasItems = true;
+            let item = cart[code];
+            let itemTotal = item.price * item.qty;
+            total += itemTotal;
+
+            list.innerHTML += `
+                <div class="item-row">
+                    <div class="item-info">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-price">${item.price} смн</div>
+                    </div>
+                    <div class="qty-controls">
+                        <button class="qty-btn btn-minus" onclick="updateQty('${code}', -1)">-</button>
+                        <span class="qty-num">${item.qty}</span>
+                        <button class="qty-btn btn-plus" onclick="updateQty('${code}', 1)">+</button>
+                    </div>
+                </div>`;
+        }
+
+        if (!hasItems) {
+            list.innerHTML = '<div class="empty-msg">Ҳанӯз моле скан нашудааст</div>';
+            tg.MainButton.hide();
+        } else {
+            document.getElementById('total-val').innerText = total.toFixed(2);
+            tg.MainButton.setText(`ТАСДИҚИ ФУРӮШ (${total.toFixed(2)} смн)`);
             tg.MainButton.show();
         }
     }
 
     tg.MainButton.onClick(() => {
-        if (currentMode === 'sale') {
+        if (Object.keys(cart).length > 0) {
             tg.sendData(JSON.stringify({action: 'sale', items: cart}));
         }
     });
 
     const scanner = new Html5Qrcode("reader");
-    const config = { fps: 15, qrbox: { width: 250, height: 250 } };
-    
-    scanner.start({ facingMode: "environment" }, config, onScanSuccess)
-    .catch(err => {
-        alert("Хатогии камера: " + err);
-    });
+    scanner.start({ facingMode: "environment" }, { fps: 20, qrbox: {width: 200, height: 120} }, onScanSuccess);
 </script>
 </body>
 </html>
