@@ -7,32 +7,41 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { margin: 0; background: #121212; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: white; }
+        body { margin: 0; background: #000; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        .top-nav { display: flex; background: #1a1a1a; padding: 15px; gap: 10px; z-index: 1000; }
-        .mode-btn { 
-            flex: 1; padding: 15px; border: none; border-radius: 12px; 
-            color: white; font-weight: bold; font-size: 16px; 
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            cursor: pointer; transition: 0.3s; opacity: 0.4;
-        }
+        /* Навигатсия */
+        .top-nav { position: fixed; top: 0; width: 100%; display: flex; padding: 10px; gap: 10px; z-index: 1000; box-sizing: border-box; background: rgba(0,0,0,0.5); }
+        .mode-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; opacity: 0.5; transition: 0.3s; }
         .btn-sale { background: #27ae60; }
         .btn-receive { background: #2980b9; }
-        .active-mode { opacity: 1; border: 2px solid white; }
+        .active-mode { opacity: 1; border: 2px solid white; transform: scale(1.05); }
 
-        #reader { width: 100% !important; height: 35vh !important; background: #000; }
-        #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
-        #items-list { flex-grow: 1; overflow-y: auto; }
+        /* Контейнери Сканер */
+        #reader-container { width: 100%; transition: height 0.4s ease; background: #000; position: relative; }
+        #reader { width: 100% !important; }
+        video { object-fit: cover !important; }
+
+        /* Интерфейси Фурӯш (Рӯйхат) */
+        #interface { 
+            flex-grow: 1; background: #fff; border-radius: 20px 20px 0 0; 
+            padding: 15px; display: none; flex-direction: column; overflow: hidden; 
+        }
+        #items-list { flex-grow: 1; overflow-y: auto; color: #333; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .qty-controls { display: flex; align-items: center; gap: 10px; }
+        .qty-btn { width: 30px; height: 30px; border-radius: 50%; border: none; color: white; font-weight: bold; }
+        .total-box { padding: 15px 5px; font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; color: #000; border-top: 2px solid #eee; }
+
+        /* Дизайни махсус барои режими ҚАБУЛ (Фуллскрин) */
+        body.mode-receive #reader-container { height: 100vh; }
+        body.mode-receive #interface { display: none; }
         
-        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        .qty-controls { display: flex; align-items: center; gap: 15px; }
-        .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: none; font-size: 20px; color: white; display: flex; align-items: center; justify-content: center; }
-        .btn-minus { background: #e74c3c; }
-        .btn-plus { background: #2ecc71; }
-        .total-box { padding: 15px 5px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; border-top: 2px solid #eee; color: #1a1a1a; }
+        /* Дизайни махсус барои режими ФУРӮШ (30%) */
+        body.mode-sale #reader-container { height: 30vh; }
+        body.mode-sale #interface { display: flex; }
     </style>
 </head>
-<body>
+<body class="mode-sale">
 
 <audio id="beep-sound" preload="auto">
     <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
@@ -43,13 +52,15 @@
     <button id="nav-receive" class="mode-btn btn-receive" onclick="setMode('receive')">📦 ҚАБУЛ</button>
 </div>
 
-<div id="reader"></div>
+<div id="reader-container">
+    <div id="reader"></div>
+</div>
 
 <div id="interface">
     <div id="items-list">
-        <p id="empty-hint" style="text-align: center; color: #999; margin-top: 20px;">Рӯйхати фурӯш холӣ аст</p>
+        <p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>
     </div>
-    <div class="total-box" id="total-container">
+    <div class="total-box">
         <span>ҶАМЪ:</span>
         <span><span id="total-price">0.00</span> смн</span>
     </div>
@@ -62,69 +73,38 @@
     const beep = document.getElementById('beep-sound');
     let currentMode = 'sale';
     let cart = {};
-    let lastResult = "";
-    let lastTime = 0;
 
     function setMode(mode) {
         currentMode = mode;
+        document.body.className = 'mode-' + mode;
         document.getElementById('nav-sale').classList.toggle('active-mode', mode === 'sale');
         document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
         
-        // Дар режими қабул рӯйхати фурӯшро пинҳон мекунем
-        const interfaceDiv = document.getElementById('interface');
         if (mode === 'receive') {
-            interfaceDiv.style.background = "#ebf5fb"; // Ранги кабудчатоб барои қабул
-            document.getElementById('items-list').innerHTML = '<p style="text-align: center; color: #2980b9; margin-top: 20px; font-weight: bold;">Режими ҚАБУЛ фаъол аст.<br>Молро скан кунед...</p>';
-            document.getElementById('total-container').style.visibility = "hidden";
             tg.MainButton.hide();
-        } else {
-            interfaceDiv.style.background = "#ffffff";
-            document.getElementById('total-container').style.visibility = "visible";
-            renderCart();
+        } else if (Object.keys(cart).length > 0) {
+            tg.MainButton.show();
         }
     }
 
     function onScanSuccess(decodedText) {
-        const now = Date.now();
-        if (decodedText !== lastResult || (now - lastTime) > 2000) {
-            lastResult = decodedText;
-            lastTime = now;
-            beep.play().catch(() => {});
-            
-            if (currentMode === 'receive') {
-                // ИН ҶО ТАҒЙИРОТИ АСОСӢ:
-                // Маълумотро ба бот мефиристем ва Web App баста мешавад
-                tg.sendData(JSON.stringify({
-                    action: 'receive',
-                    code: decodedText
-                }));
-            } else {
-                handleSaleScan(decodedText);
-            }
-        }
-    }
-
-    function handleSaleScan(barcode) {
-        if (!cart[barcode]) {
-            cart[barcode] = { name: "Мол: " + barcode, price: 15.00, qty: 1 };
-        } else {
-            cart[barcode].qty += 1;
-        }
-        renderCart();
+        beep.play().catch(() => {});
         
-        // Тугмаи ТАСДИҚ-и Телеграмро фаъол мекунем
-        tg.MainButton.setText("ТАСДИҚИ ФУРӮШ");
-        tg.MainButton.show();
-    }
-
-    tg.MainButton.onClick(() => {
-        if (currentMode === 'sale') {
-            tg.sendData(JSON.stringify({
-                action: 'sale',
-                items: cart
-            }));
+        if (currentMode === 'receive') {
+            // Фристодани маълумот ва бастани Web App
+            tg.sendData(JSON.stringify({action: 'receive', code: decodedText}));
+        } else {
+            // Илова ба сабад
+            if (!cart[decodedText]) {
+                cart[decodedText] = { name: "Мол: " + decodedText.substring(0,6), price: 15.00, qty: 1 };
+            } else {
+                cart[decodedText].qty += 1;
+            }
+            renderCart();
+            tg.MainButton.setText("ТАСДИҚИ ФУРӮШ");
+            tg.MainButton.show();
         }
-    });
+    }
 
     function updateQty(barcode, delta) {
         if (cart[barcode]) {
@@ -138,37 +118,29 @@
         const list = document.getElementById('items-list');
         list.innerHTML = '';
         let total = 0;
-        let count = 0;
-        
         Object.keys(cart).forEach(code => {
-            count++;
             const item = cart[code];
             total += item.price * item.qty;
-            const div = document.createElement('div');
-            div.className = 'item-row';
-            div.innerHTML = `
-                <div class="item-info">
-                    <b>${item.name}</b>
-                    <span style="color:#27ae60">${item.price.toFixed(2)} смн</span>
-                </div>
-                <div class="qty-controls">
-                    <button class="qty-btn btn-minus" onclick="updateQty('${code}', -1)">−</button>
-                    <b>${item.qty}</b>
-                    <button class="qty-btn btn-plus" onclick="updateQty('${code}', 1)">+</button>
+            list.innerHTML += `
+                <div class="item-row">
+                    <div><b>${item.name}</b><br><small>${item.price} смн</small></div>
+                    <div class="qty-controls">
+                        <button class="qty-btn" style="background:#e74c3c" onclick="updateQty('${code}', -1)">-</button>
+                        <b>${item.qty}</b>
+                        <button class="qty-btn" style="background:#2ecc71" onclick="updateQty('${code}', 1)">+</button>
+                    </div>
                 </div>`;
-            list.appendChild(div);
         });
-        
-        if (count === 0) {
-            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>';
-            tg.MainButton.hide();
-        }
         document.getElementById('total-price').innerText = total.toFixed(2);
+        if (total === 0) tg.MainButton.hide();
     }
 
+    tg.MainButton.onClick(() => {
+        tg.sendData(JSON.stringify({action: 'sale', items: cart}));
+    });
+
     const html5QrCode = new Html5Qrcode("reader");
-    const config = { fps: 15, qrbox: { width: 250, height: 180 } };
-    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+    html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 150 } }, onScanSuccess);
 </script>
 </body>
 </html>
