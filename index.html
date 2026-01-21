@@ -18,33 +18,21 @@
         }
         .btn-sale { background: #27ae60; }
         .btn-receive { background: #2980b9; }
-        .active-mode { opacity: 1; transform: scale(1); border: 2px solid white; }
+        .active-mode { opacity: 1; border: 2px solid white; }
 
-        /* Контейнери сканер */
-        #reader { 
-            width: 100% !important; 
-            height: 35vh !important; 
-            background: #000;
-        }
-        #reader__scan_region { background: #000; }
-        video { object-fit: cover !important; }
-
+        #reader { width: 100% !important; height: 35vh !important; background: #000; }
         #interface { flex-grow: 1; background: #ffffff; color: #333; border-radius: 20px 20px 0 0; padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
         #items-list { flex-grow: 1; overflow-y: auto; }
         
         .item-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
-        .item-info b { font-size: 16px; color: #222; display: block; }
-        .item-info span { color: #27ae60; font-weight: bold; }
-
         .qty-controls { display: flex; align-items: center; gap: 15px; }
         .qty-btn { width: 32px; height: 32px; border-radius: 50%; border: none; font-size: 20px; color: white; display: flex; align-items: center; justify-content: center; }
         .btn-minus { background: #e74c3c; }
         .btn-plus { background: #2ecc71; }
-
         .total-box { padding: 15px 5px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; border-top: 2px solid #eee; color: #1a1a1a; }
     </style>
 </head>
-<body class="mode-sale">
+<body>
 
 <audio id="beep-sound" preload="auto">
     <source src="https://www.soundjay.com/button/beep-07.mp3" type="audio/mpeg">
@@ -59,10 +47,9 @@
 
 <div id="interface">
     <div id="items-list">
-        <p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>
+        <p id="empty-hint" style="text-align: center; color: #999; margin-top: 20px;">Рӯйхати фурӯш холӣ аст</p>
     </div>
-    
-    <div class="total-box">
+    <div class="total-box" id="total-container">
         <span>ҶАМЪ:</span>
         <span><span id="total-price">0.00</span> смн</span>
     </div>
@@ -82,33 +69,62 @@
         currentMode = mode;
         document.getElementById('nav-sale').classList.toggle('active-mode', mode === 'sale');
         document.getElementById('nav-receive').classList.toggle('active-mode', mode === 'receive');
+        
+        // Дар режими қабул рӯйхати фурӯшро пинҳон мекунем
+        const interfaceDiv = document.getElementById('interface');
+        if (mode === 'receive') {
+            interfaceDiv.style.background = "#ebf5fb"; // Ранги кабудчатоб барои қабул
+            document.getElementById('items-list').innerHTML = '<p style="text-align: center; color: #2980b9; margin-top: 20px; font-weight: bold;">Режими ҚАБУЛ фаъол аст.<br>Молро скан кунед...</p>';
+            document.getElementById('total-container').style.visibility = "hidden";
+            tg.MainButton.hide();
+        } else {
+            interfaceDiv.style.background = "#ffffff";
+            document.getElementById('total-container').style.visibility = "visible";
+            renderCart();
+        }
     }
 
-    // Инитиализатсияи сканер
-    function onScanSuccess(decodedText, decodedResult) {
+    function onScanSuccess(decodedText) {
         const now = Date.now();
-        // Пешгирии сканеркунии такрорӣ дар 2 сония
         if (decodedText !== lastResult || (now - lastTime) > 2000) {
             lastResult = decodedText;
             lastTime = now;
-            
             beep.play().catch(() => {});
-            handleScan(decodedText);
+            
+            if (currentMode === 'receive') {
+                // ИН ҶО ТАҒЙИРОТИ АСОСӢ:
+                // Маълумотро ба бот мефиристем ва Web App баста мешавад
+                tg.sendData(JSON.stringify({
+                    action: 'receive',
+                    code: decodedText
+                }));
+            } else {
+                handleSaleScan(decodedText);
+            }
         }
     }
 
-    function handleScan(barcode) {
-        if (currentMode === 'sale') {
-            if (!cart[barcode]) {
-                cart[barcode] = { name: "Мол: " + barcode, price: 15.00, qty: 1 };
-            } else {
-                cart[barcode].qty += 1;
-            }
-            renderCart();
+    function handleSaleScan(barcode) {
+        if (!cart[barcode]) {
+            cart[barcode] = { name: "Мол: " + barcode, price: 15.00, qty: 1 };
         } else {
-            alert("Қабули мол: " + barcode);
+            cart[barcode].qty += 1;
         }
+        renderCart();
+        
+        // Тугмаи ТАСДИҚ-и Телеграмро фаъол мекунем
+        tg.MainButton.setText("ТАСДИҚИ ФУРӮШ");
+        tg.MainButton.show();
     }
+
+    tg.MainButton.onClick(() => {
+        if (currentMode === 'sale') {
+            tg.sendData(JSON.stringify({
+                action: 'sale',
+                items: cart
+            }));
+        }
+    });
 
     function updateQty(barcode, delta) {
         if (cart[barcode]) {
@@ -122,8 +138,10 @@
         const list = document.getElementById('items-list');
         list.innerHTML = '';
         let total = 0;
+        let count = 0;
         
         Object.keys(cart).forEach(code => {
+            count++;
             const item = cart[code];
             total += item.price * item.qty;
             const div = document.createElement('div');
@@ -131,31 +149,26 @@
             div.innerHTML = `
                 <div class="item-info">
                     <b>${item.name}</b>
-                    <span>${item.price.toFixed(2)} смн</span>
+                    <span style="color:#27ae60">${item.price.toFixed(2)} смн</span>
                 </div>
                 <div class="qty-controls">
                     <button class="qty-btn btn-minus" onclick="updateQty('${code}', -1)">−</button>
                     <b>${item.qty}</b>
                     <button class="qty-btn btn-plus" onclick="updateQty('${code}', 1)">+</button>
-                </div>
-            `;
+                </div>`;
             list.appendChild(div);
         });
+        
+        if (count === 0) {
+            list.innerHTML = '<p style="text-align: center; color: #999; margin-top: 20px;">Рӯйхат холӣ аст</p>';
+            tg.MainButton.hide();
+        }
         document.getElementById('total-price').innerText = total.toFixed(2);
     }
 
-    // Оғози камера
     const html5QrCode = new Html5Qrcode("reader");
-    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-
-    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-    .catch(err => {
-        console.error("Камера ёфт нашуд", err);
-        // Агар камераи қафо ёфт нашавад, ҳамаи камераҳоро месанҷем
-        html5QrCode.start({ deviceId: { exact: undefined } }, config, onScanSuccess);
-    });
-
+    const config = { fps: 15, qrbox: { width: 250, height: 180 } };
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
 </script>
 </body>
 </html>
-☒ 
