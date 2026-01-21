@@ -14,7 +14,7 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-# Эҷоди база
+# Омода кардани база
 with get_db() as conn:
     conn.execute('''CREATE TABLE IF NOT EXISTS products 
                     (code TEXT PRIMARY KEY, name TEXT, buy REAL, sell REAL, qty INTEGER)''')
@@ -24,57 +24,74 @@ with get_db() as conn:
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn_sale = types.KeyboardButton("🛒 ФУРӮШ (СКАНЕР)", web_app=types.WebAppInfo(SCANNER_URL))
-    btn_receive = types.KeyboardButton("📦 ҚАБУЛ АЗ EXCEL")
-    markup.add(btn_sale, btn_receive)
+    # Тугмаи Web App барои фурӯш
+    btn_scan = types.KeyboardButton("🚀 СКАНЕРИ ФУРӮШ", web_app=types.WebAppInfo(SCANNER_URL))
+    # Тугмаи оддӣ дар бот барои Excel
+    btn_excel = types.KeyboardButton("📦 ҚАБУЛИ МОЛ (EXCEL)")
+    markup.add(btn_scan)
+    markup.add(btn_excel)
     bot.send_message(message.chat.id, "Интихоб кунед:", reply_markup=markup)
 
-# Коркарди пахши тугмаи "ҚАБУЛ АЗ EXCEL"
-@bot.message_handler(func=lambda message: message.text == "📦 ҚАБУЛ АЗ EXCEL")
-def ask_for_excel_data(message):
+# 1. ҚАБУЛИ МОЛ АЗ EXCEL (Матни копяшуда)
+@bot.message_handler(func=lambda message: message.text == "📦 ҚАБУЛИ МОЛ (EXCEL)")
+def excel_import_start(message):
     msg = bot.send_message(message.chat.id, 
-        "📊 Рӯйхати молҳоро аз Excel копя карда ин ҷо фиристед.\n\n"
-        "**Формати зарурӣ:**\n"
-        "`Штрихкод | Ном | Нархи харид | Нархи фурӯш | Миқдор` \n\n"
-        "Ҳар як мол дар сатри нав бошад.", parse_mode="Markdown")
-    bot.register_next_step_handler(msg, process_excel_import)
+        "📊 **Тарзи қабули мол аз Excel:**\n\n"
+        "Маълумотро аз Excel копя кунед ва инҷо фиристед.\n"
+        "Формат бояд чунин бошад (бо вергул ё аломати | ҷудо кунед):\n"
+        "`Штрихкод, Ном, Нархи_харид, Нархи_фурӯш, Миқдор`\n\n"
+        "*Мисол:* `123456, Кола 1л, 5, 8, 100`", parse_mode="Markdown")
+    bot.register_next_step_handler(msg, process_excel_text)
 
-def process_excel_import(message):
+def process_excel_text(message):
+    if not message.text:
+        bot.send_message(message.chat.id, "❌ Лутфан матн фиристед.")
+        return
+
     lines = message.text.split('\n')
-    count = 0
+    added = 0
     errors = 0
     
     with get_db() as conn:
         for line in lines:
             try:
-                # Ҷудо кардани маълумот (ту метавонӣ ҷудокунандаро иваз кунӣ, масалан бо пробел ё вергул)
+                # Ҷудо кардан бо вергул ё аломати |
                 parts = [p.strip() for p in line.replace('|', ',').split(',')]
-                
                 if len(parts) >= 5:
                     code, name, buy, sell, qty = parts[0], parts[1], float(parts[2]), float(parts[3]), int(parts[4])
                     conn.execute("INSERT OR REPLACE INTO products (code, name, buy, sell, qty) VALUES (?, ?, ?, ?, ?)",
                                  (code, name, buy, sell, qty))
-                    count += 1
+                    added += 1
+                else:
+                    errors += 1
             except:
                 errors += 1
         conn.commit()
     
-    bot.send_message(message.chat.id, f"✅ Иҷро шуд!\n📥 Бор карда шуд: {count} мол\n❌ Хатогиҳо: {errors}")
+    bot.send_message(message.chat.id, f"✅ Тамом!\n📥 Илова шуд: {added} мол\n❌ Хатогиҳо: {errors}")
 
-# Қабули фурӯш аз Web App (Сканкунӣ)
+# 2. ҚАБУЛИ МАЪЛУМОТ АЗ СКАНЕР (Web App)
 @bot.message_handler(content_types=['web_app_data'])
-def handle_sale_from_app(message):
-    data = json.loads(message.web_app_data.data)
-    if data['action'] == 'sale':
-        items = data['items']
-        total = 0
-        with get_db() as conn:
-            for code, info in items.items():
-                total += info['qty'] * info['price']
-                conn.execute("INSERT INTO sales (name, sell_price, date) VALUES (?, ?, ?)", 
-                             (info['name'], info['price'] * info['qty'], datetime.now().strftime("%d.%m.%Y %H:%M")))
-            conn.commit()
-        bot.send_message(message.chat.id, f"✅ Фурӯш анҷом ёфт!\n💰 Ҷамъ: {total} смн")
+def handle_app_data(message):
+    try:
+        data = json.loads(message.web_app_data.data)
+        
+        # Агар аз сканер барои фурӯш ояд
+        if data['action'] == 'sale':
+            items = data['items']
+            total = 0
+            with get_db() as conn:
+                for code, info in items.items():
+                    summ = info['qty'] * info['price']
+                    total += summ
+                    conn.execute("INSERT INTO sales (name, sell_price, date) VALUES (?, ?, ?)", 
+                                 (info['name'], summ, datetime.now().strftime("%d.%m.%Y %H:%M")))
+                    conn.execute("UPDATE products SET qty = qty - ? WHERE code = ?", (info['qty'], code))
+                conn.commit()
+            bot.send_message(message.chat.id, f"✅ Фурӯш қабул шуд!\n💰 Ҷамъ: {total} смн")
+            
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ Хатогӣ: {e}")
 
 if __name__ == "__main__":
     bot.polling(none_stop=True)
